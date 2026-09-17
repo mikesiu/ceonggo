@@ -98,13 +98,13 @@ def friendly_error(event: dict) -> str:
     if kind == "driver":
         return t("The graphics driver is too old for the engine. Update it from nvidia.com.")
     if kind == "missing_files":
-        return t("Some engine files are missing. Open Settings → Repair to run Gokuk Setup.")
+        return t("Some engine files are missing. Open Settings → Repair to run Ceonggo Setup.")
     if kind == "no_score":
         return t("The melody could not be written down from this recording ({reason}). "
                  "Try a clearer recording, or a different part of the song.", reason=message)
     if kind == "mixed_versions":
-        return t("This Gokuk folder mixes files from two versions, so the engine could not start. "
-                 "Replace Gokuk.exe, Gokuk Setup.exe and the whole _internal folder from the new release "
+        return t("This Ceonggo folder mixes files from two versions, so the engine could not start. "
+                 "Replace Ceonggo.exe, Ceonggo Setup.exe and the whole _internal folder from the new release "
                  "(keep runtime, models and songs).")
     if kind == "crashed":
         return t("The engine stopped unexpectedly. The details are in the log folder.")

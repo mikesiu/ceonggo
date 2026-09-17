@@ -258,7 +258,7 @@ class CoverTab(QWidget):
         self.preview_btn.setEnabled(bool(self.source))
         self.transcribe_btn.setEnabled(bool(self.source) and not busy and has_cover)
         if not has_cover:
-            self.transcribe_btn.setToolTip(t("The Cover maker is not installed - add it with Gokuk Setup."))
+            self.transcribe_btn.setToolTip(t("The Cover maker is not installed - add it with Ceonggo Setup."))
         self.view_score.setEnabled(bool(self.score_text))
         self.step3.setEnabled(bool(self.score_text))
         self.cover_btn.setEnabled(bool(self.score_text) and not busy)
@@ -341,7 +341,7 @@ class CoverTab(QWidget):
             text = Path(path).read_text(encoding="utf-8-sig")
             abc_dialect.parse(text)
         except (OSError, UnicodeDecodeError, abc_dialect.AbcError) as error:
-            QMessageBox.warning(self, t("Open a score"), t("This file is not a score Gokuk can use: {why}", why=error))
+            QMessageBox.warning(self, t("Open a score"), t("This file is not a score Ceonggo can use: {why}", why=error))
             return
         self.set_score(text, Path(path).name)
 

@@ -1,4 +1,4 @@
-"""Gokuk worker: one YuE2 song per process.
+"""Ceonggo worker: one YuE2 song per process.
 
 Runs inside ``runtime/yue2/python.exe``. The GUI never imports torch; it starts
 this script, sends a job, and reads progress events (see ``_protocol.py``).
@@ -159,7 +159,7 @@ def run(job: dict) -> int:
     output.mkdir(parents=True, exist_ok=True)
 
     if not torch.cuda.is_available():
-        raise RuntimeError("CUDA is not available - Gokuk needs an NVIDIA graphics card")
+        raise RuntimeError("CUDA is not available - Ceonggo needs an NVIDIA graphics card")
     props = torch.cuda.get_device_properties(0)
     proto.emit("hello", worker="yue2", torch=torch.__version__, gpu=props.name,
                vram_gib=round(props.total_memory / 2**30, 1))

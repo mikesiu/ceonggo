@@ -1,4 +1,4 @@
-"""The Gokuk window: Create, Cover and Library tabs above a player bar."""
+"""The Ceonggo window: Create, Cover and Library tabs above a player bar."""
 from __future__ import annotations
 
 import shutil
@@ -33,7 +33,7 @@ class MainWindow(QMainWindow):
         self.library = Library(cfg.songs_dir())
         self.engine = Engine(self)
         self.gpu = gpu.detect()
-        self.setWindowTitle("Gokuk")
+        self.setWindowTitle("Ceonggo")
         self.resize(1480, 920)
         self.setMinimumSize(1180, 760)
         self._build()
@@ -53,7 +53,7 @@ class MainWindow(QMainWindow):
         header = QHBoxLayout()
         header.setContentsMargins(20, 6, 16, 0)
         logo = QLabel(f"<span style='font-size:21px;font-weight:900;color:{theme.ACCENT}'>●</span>"
-                      f"<span style='font-size:21px;font-weight:900'>&nbsp;Gokuk</span>")
+                      f"<span style='font-size:21px;font-weight:900'>&nbsp;Ceonggo</span>")
         header.addWidget(logo)
         header.addSpacing(18)
 
@@ -221,11 +221,11 @@ class MainWindow(QMainWindow):
     def _settings(self) -> None:
         dialog = SettingsDialog(self.cfg, self)
         if dialog.exec() and dialog.language_changed:
-            QMessageBox.information(self, t("Settings"), t("The new language is used the next time Gokuk starts."))
+            QMessageBox.information(self, t("Settings"), t("The new language is used the next time Ceonggo starts."))
 
     def closeEvent(self, event) -> None:
         if self.engine.busy:
-            if QMessageBox.question(self, t("Quit Gokuk?"),
+            if QMessageBox.question(self, t("Quit Ceonggo?"),
                                     t("A song is still being made. Stop it and quit?")) != QMessageBox.Yes:
                 event.ignore()
                 return

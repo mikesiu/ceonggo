@@ -373,7 +373,7 @@ STYLESHEET = ""
 ICON_DIR = resource_dir() / "assets" / "icons"
 
 
-def app_icon(name: str = "Gokuk"):
+def app_icon(name: str = "Ceonggo"):
     """The window and taskbar icon, at every size Windows asks for.
 
     The .ico carries nine resolutions, so Windows picks the right one instead
@@ -390,7 +390,7 @@ def app_icon(name: str = "Gokuk"):
     return icon
 
 
-def apply(app, icon_name: str = "Gokuk") -> None:
+def apply(app, icon_name: str = "Ceonggo") -> None:
     """Load the fonts and icon, build the stylesheet, put it on the app."""
     global STYLESHEET
     load_fonts()

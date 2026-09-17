@@ -1,4 +1,4 @@
-"""Write setup/catalog.json: every file Gokuk Setup downloads, pinned.
+"""Write setup/catalog.json: every file Ceonggo Setup downloads, pinned.
 
 Run by the maintainer, never on a user's machine:
 
@@ -17,7 +17,7 @@ Needs Python 3.11+ (tomllib), network access, and ``uv`` on PATH or in
    (uv, Python runtimes, FFmpeg) and hashes them locally.
 
 The output is deterministic for a given set of upstream releases, so a diff of
-catalog.json shows exactly what a new Gokuk release will download.
+catalog.json shows exactly what a new Ceonggo release will download.
 """
 from __future__ import annotations
 
@@ -71,7 +71,7 @@ MODELS = {
     "MERT-v2-FullSong": "cover",
     "YuE2-Vae-legacy": "legacy",
 }
-#: Files in the model repos Gokuk never needs.
+#: Files in the model repos Ceonggo never needs.
 MODEL_SKIP_PREFIXES = ("assets/", "render_assets/", "examples/", "benchmarks/")
 MODEL_SKIP_SUFFIXES = (".whl", ".md", ".png", ".jpg", ".gif", ".pdf")
 MODEL_KEEP = {"README.md", "LICENSE", "THIRD_PARTY_NOTICES.md"}
@@ -86,7 +86,7 @@ def uv() -> str:
 
 def _open(url: str):
     # Some mirrors refuse urllib's default User-Agent with a 403.
-    return urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "GokukBuild/1.0"}), timeout=120)
+    return urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "CeonggoBuild/1.0"}), timeout=120)
 
 
 def get_json(url: str):

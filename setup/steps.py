@@ -1,4 +1,4 @@
-"""The install itself: everything Gokuk needs, into one portable folder.
+"""The install itself: everything Ceonggo needs, into one portable folder.
 
 Order matters and is deliberate:
 
@@ -11,7 +11,7 @@ Order matters and is deliberate:
    into the standalone Python. No virtual environments: a venv remembers
    absolute paths and breaks when the folder is moved.
 5. **Verify** each runtime can import its engine and see the graphics card.
-6. **Tidy** the wheel cache and write setup_state.json, which Gokuk reads to
+6. **Tidy** the wheel cache and write setup_state.json, which Ceonggo reads to
    decide whether it is installed.
 
 Every step is idempotent. A finished item leaves a marker holding the hash of
@@ -235,7 +235,7 @@ class Installer:
             # A fresh interpreter has no libraries: its environment must be redone too.
             self.path(f"cache/state/env_{item.id.split(':')[1]}.done").unlink(missing_ok=True)
         # Standalone Pythons refuse package installs by default (PEP 668). This
-        # copy belongs to Gokuk alone, so that protection has nothing to protect.
+        # copy belongs to Ceonggo alone, so that protection has nothing to protect.
         (dest / "Lib" / "EXTERNALLY-MANAGED").unlink(missing_ok=True)
 
     def install_wheels(self, item: Item) -> None:

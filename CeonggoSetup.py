@@ -1,8 +1,8 @@
-"""Gokuk Setup - downloads the music engine and models Gokuk needs.
+"""Ceonggo Setup - downloads the music engine and models Ceonggo needs.
 
-Start it with:   python GokukSetup.py   (or double-click "Gokuk Setup.exe")
+Start it with:   python CeonggoSetup.py   (or double-click "Ceonggo Setup.exe")
 
-A separate program from Gokuk, as in EasyAI. It only writes inside its own
+A separate program from Ceonggo, as in EasyAI. It only writes inside its own
 folder: runtime/, models/, cache/, setup_state.json and language.json.
 """
 from __future__ import annotations
@@ -31,35 +31,35 @@ def _report_fatal(error: BaseException) -> None:
     except Exception:
         pass
     message = (
-        "Gokuk Setup could not start.\n\n"
+        "Ceonggo Setup could not start.\n\n"
         f"{type(error).__name__}: {error}\n\n"
-        "If this keeps happening, run GokukSetup.bat from a Command Prompt to "
+        "If this keeps happening, run CeonggoSetup.bat from a Command Prompt to "
         "see the full message."
     )
     try:
         from PySide6.QtWidgets import QApplication, QMessageBox
 
         app = QApplication.instance() or QApplication([])
-        box = QMessageBox(QMessageBox.Critical, "Gokuk Setup", message)
+        box = QMessageBox(QMessageBox.Critical, "Ceonggo Setup", message)
         box.setDetailedText(details)
         box.exec()
     except Exception:
         try:
             import ctypes
 
-            ctypes.windll.user32.MessageBoxW(0, message, "Gokuk Setup", 0x10)
+            ctypes.windll.user32.MessageBoxW(0, message, "Ceonggo Setup", 0x10)
         except Exception:
             pass
 
 
 def _smoke_shot(app, window) -> None:
-    """GOKUK_SMOKE_SHOT=<png>: save a screenshot of the window, then quit.
+    """CEONGGO_SMOKE_SHOT=<png>: save a screenshot of the window, then quit.
 
     Lets an automated check confirm a windowed build really draws its window.
     """
     import os
 
-    target = os.environ.get("GOKUK_SMOKE_SHOT")
+    target = os.environ.get("CEONGGO_SMOKE_SHOT")
     if not target:
         return
     from PySide6.QtCore import QTimer
@@ -79,15 +79,15 @@ def main() -> int:
     from setup.ui import SetupWindow
 
     app = QApplication(sys.argv)
-    app.setApplicationName("Gokuk Setup")
-    app.setOrganizationName("Gokuk")
+    app.setApplicationName("Ceonggo Setup")
+    app.setOrganizationName("Ceonggo")
     i18n.start()
-    theme.apply(app, icon_name="GokukSetup")
+    theme.apply(app, icon_name="CeonggoSetup")
 
     if not CATALOG_PATH.is_file():
         QMessageBox.critical(
-            None, t("Gokuk Setup"),
-            t("The download list is missing:\n{path}\n\nRe-download the Gokuk folder.",
+            None, t("Ceonggo Setup"),
+            t("The download list is missing:\n{path}\n\nRe-download the Ceonggo folder.",
               path=CATALOG_PATH))
         return 1
 

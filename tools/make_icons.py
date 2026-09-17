@@ -1,13 +1,13 @@
-"""Build the Gokuk and Gokuk Setup icon packs.
+"""Build the Ceonggo and Ceonggo Setup icon packs.
 
     python tools/make_icons.py
 
-If ``Gokuk-Icon.png`` (a square master with transparency) sits in the project
+If ``Ceonggo-Icon.png`` (a square master with transparency) sits in the project
 root it is used; otherwise a placeholder mark is drawn: an orange disc with a
 beamed pair of notes on the app's near-black. Setup gets the same mark with a
 download arrow badge, so the two are easy to tell apart in a folder.
 
-Writes assets/icons/Gokuk.ico, GokukSetup.ico (nine resolutions each) and PNGs.
+Writes assets/icons/Ceonggo.ico, CeonggoSetup.ico (nine resolutions each) and PNGs.
 Sizes below 48 px get a light unsharp mask, as in EasyAI's icon builder.
 """
 from __future__ import annotations
@@ -17,7 +17,7 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFilter
 
 ROOT = Path(__file__).resolve().parent.parent
-MASTER = ROOT / "Gokuk-Icon.png"
+MASTER = ROOT / "Ceonggo-Icon.png"
 OUT = ROOT / "assets" / "icons"
 ICO_SIZES = (16, 20, 24, 32, 40, 48, 64, 128, 256)
 SHARPEN_BELOW = 48
@@ -76,8 +76,8 @@ def write(name: str, master: Image.Image) -> None:
 
 def main() -> int:
     master = Image.open(MASTER).convert("RGBA") if MASTER.is_file() else placeholder()
-    write("Gokuk", master)
-    write("GokukSetup", with_badge(master))
+    write("Ceonggo", master)
+    write("CeonggoSetup", with_badge(master))
     return 0
 
 

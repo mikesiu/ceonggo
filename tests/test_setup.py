@@ -140,7 +140,7 @@ def test_download_cancel_keeps_part(server, tmp_path):
 
 
 def test_install_state(tmp_path, monkeypatch):
-    monkeypatch.setenv("GOKUK_ROOT", str(tmp_path))
+    monkeypatch.setenv("CEONGGO_ROOT", str(tmp_path))
     from app.install_state import InstallState
 
     assert not InstallState.load().ready

@@ -115,7 +115,7 @@ def _account_needed(name: str, url: str, status: int) -> str:
 
 def _session(token: str = "") -> requests.Session:
     s = requests.Session()
-    s.headers["User-Agent"] = "GokukSetup/1.0"
+    s.headers["User-Agent"] = "CeonggoSetup/1.0"
     if token:
         s.headers["Authorization"] = f"Bearer {token}"
     return s

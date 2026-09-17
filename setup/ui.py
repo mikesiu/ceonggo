@@ -1,12 +1,12 @@
-"""The Gokuk Setup window.
+"""The Ceonggo Setup window.
 
 One screen, read top to bottom, like EasyAI Setup: this computer, what to
 include, how big that is, then Install. The download size is the most
 prominent number on the page - agreeing to 17 GB by accident would be a
 miserable surprise.
 
-Setup installs into its own folder. Gokuk is portable, so the runtimes and
-models have to sit beside Gokuk.exe; to put Gokuk somewhere else, move the
+Setup installs into its own folder. Ceonggo is portable, so the runtimes and
+models have to sit beside Ceonggo.exe; to put Ceonggo somewhere else, move the
 whole folder (before or after installing - either works).
 
 While installing, the options give way to progress: an overall bar with the
@@ -153,7 +153,7 @@ class SetupWindow(QMainWindow):
         self.worker: InstallWorker | None = None
         self._current_step = 0
         self.gpu = gpu_info.detect()
-        self.setWindowTitle(t("Gokuk Setup"))
+        self.setWindowTitle(t("Ceonggo Setup"))
         self.resize(820, 860)
         self.setMinimumSize(700, 640)
         self._build()
@@ -178,11 +178,11 @@ class SetupWindow(QMainWindow):
         # Language first: someone who cannot read the window must still find it.
         top = QHBoxLayout()
         title_col = QVBoxLayout()
-        title = QLabel(t("Gokuk Setup"))
+        title = QLabel(t("Ceonggo Setup"))
         title.setStyleSheet("font-size:22px;font-weight:800;")
         title_col.addWidget(title)
         blurb = QLabel(t("Downloads the music engine and its models. Run this once before "
-                         "opening Gokuk - everything stays inside this folder."))
+                         "opening Ceonggo - everything stays inside this folder."))
         blurb.setObjectName("Hint")
         blurb.setWordWrap(True)
         title_col.addWidget(blurb)
@@ -274,7 +274,7 @@ class SetupWindow(QMainWindow):
         self.install_btn.clicked.connect(self._start)
         layout.addWidget(self.install_btn)
 
-        self.launch_now = QPushButton(t("Open Gokuk"))
+        self.launch_now = QPushButton(t("Open Ceonggo"))
         self.launch_now.clicked.connect(self._launch)
         self.launch_now.setVisible(state.ready)
         layout.addWidget(self.launch_now)
@@ -288,7 +288,7 @@ class SetupWindow(QMainWindow):
         layout.setContentsMargins(26, 22, 26, 22)
         layout.setSpacing(12)
 
-        self.p_title = QLabel(t("Installing Gokuk"))
+        self.p_title = QLabel(t("Installing Ceonggo"))
         self.p_title.setStyleSheet("font-size:22px;font-weight:800;")
         layout.addWidget(self.p_title)
         self.p_sub = QLabel(t("You can leave this running. If it stops for any reason, run Setup "
@@ -357,7 +357,7 @@ class SetupWindow(QMainWindow):
         self.again_btn.clicked.connect(self._back)
         self.again_btn.setVisible(False)
         buttons.addWidget(self.again_btn)
-        self.launch_btn = QPushButton(t("Launch Gokuk"))
+        self.launch_btn = QPushButton(t("Launch Ceonggo"))
         self.launch_btn.setObjectName("Primary")
         self.launch_btn.setMinimumWidth(220)
         self.launch_btn.clicked.connect(self._launch)
@@ -383,7 +383,7 @@ class SetupWindow(QMainWindow):
                                       "On a 100 Mbit connection allow about 30 minutes."))
         else:
             self.total.setText(t("Everything is installed"))
-            self.total_hint.setText(t("Press Install to check the files again, or open Gokuk."))
+            self.total_hint.setText(t("Press Install to check the files again, or open Ceonggo."))
         self.space.setText(t("{free} free on this drive", free=human_bytes(free)))
 
         notes = []
@@ -391,13 +391,13 @@ class SetupWindow(QMainWindow):
             notes.append(t("⚠  Not enough room - this needs about {size}.", size=human_bytes(todo * 1.2)))
         low = str(self.root).lower()
         if any(place in low for place in RISKY_PLACES):
-            notes.append(t("⚠  This folder is synced or protected by Windows. Move the Gokuk folder "
-                           "somewhere like D:\\Gokuk first."))
+            notes.append(t("⚠  This folder is synced or protected by Windows. Move the Ceonggo folder "
+                           "somewhere like D:\\Ceonggo first."))
         if len(str(self.root)) > 120:
             notes.append(t("⚠  The folder path is very long - some files may fail. A shorter path is safer."))
         if any(ord(c) > 127 for c in str(self.root)):
             notes.append(t("⚠  The folder path has non-English characters - if installing fails, "
-                           "move the folder to a plain path like D:\\Gokuk."))
+                           "move the folder to a plain path like D:\\Ceonggo."))
         self.warnings.setText("\n".join(notes))
         level, _ = gpu_info.verdict(self.gpu)
         self.install_btn.setEnabled(self.licence.isChecked())
@@ -413,7 +413,7 @@ class SetupWindow(QMainWindow):
         keep = (self._selected(), self.licence.isChecked(), self.clean.isChecked(), self.token.text())
         i18n.load(code)
         i18n.remember(code)
-        self.setWindowTitle(t("Gokuk Setup"))
+        self.setWindowTitle(t("Ceonggo Setup"))
         self._build()
         for card in self.cards:
             if not card.component.required:
@@ -437,7 +437,7 @@ class SetupWindow(QMainWindow):
         self.amount.setText("")
         self.speed.setText("")
         self.file_label.setText("")
-        self.p_title.setText(t("Installing Gokuk"))
+        self.p_title.setText(t("Installing Ceonggo"))
         self._set_running(True)
         self.stack.setCurrentIndex(1)
 
@@ -489,7 +489,7 @@ class SetupWindow(QMainWindow):
         if report.ok:
             self.steps.set_current(self.steps.count())
             self.overall.setValue(1000)
-            self.p_title.setText(t("Gokuk is ready"))
+            self.p_title.setText(t("Ceonggo is ready"))
             self.step_label.setText(t("Everything is installed."))
             self.p_sub.setText(t("Installed {n} items, {k} were already there.",
                                  n=len(report.installed), k=len(report.skipped)))
@@ -516,7 +516,7 @@ class SetupWindow(QMainWindow):
             else:
                 subprocess.Popen([str(target)], cwd=str(self.root))
         except OSError as exc:
-            QMessageBox.warning(self, t("Gokuk Setup"), t("Could not start Gokuk: {e}", e=exc))
+            QMessageBox.warning(self, t("Ceonggo Setup"), t("Could not start Ceonggo: {e}", e=exc))
             return
         self.close()
 

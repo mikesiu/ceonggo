@@ -1,12 +1,12 @@
-"""Build the portable release: dist/Gokuk/ and release/Gokuk-v<version>.zip.
+"""Build the portable release: dist/Ceonggo/ and release/Ceonggo-v<version>.zip.
 
     python tools/build_release.py
 
 1. Clears Python caches out of workers/ (they would ship as data files).
-2. Runs PyInstaller on Gokuk.spec - both programs into one folder.
+2. Runs PyInstaller on Ceonggo.spec - both programs into one folder.
 3. Adds README.txt and the licence notes.
 4. Zips the folder. The zip is small (~60 MB): runtimes and models are not in
-   it - Gokuk Setup downloads them on the user's machine.
+   it - Ceonggo Setup downloads them on the user's machine.
 
 The build Python needs PySide6, requests and pyinstaller (requirements-build.txt).
 """
@@ -24,19 +24,19 @@ DIST = ROOT / "dist"
 BUILD = ROOT / "build"
 RELEASE = ROOT / "release"
 
-README = """Gokuk {version}
+README = """Ceonggo {version}
 ============
 
 Make songs from a style and lyrics, and covers from recordings - on your own
 NVIDIA graphics card. Powered by YuE2 and SheetSage2 (m-a-p).
 
 FIRST TIME
-  1. Put this folder somewhere with about 25 GB free, for example D:\\Gokuk
+  1. Put this folder somewhere with about 25 GB free, for example D:\\Ceonggo
      (not inside OneDrive or Program Files).
-  2. Double-click "Gokuk Setup.exe". It downloads the music engine and models
+  2. Double-click "Ceonggo Setup.exe". It downloads the music engine and models
      (about 16 GB) with progress shown. You can stop and re-run it at any time;
      it carries on where it left off.
-  3. Double-click "Gokuk.exe".
+  3. Double-click "Ceonggo.exe".
 
 NEEDS
   Windows 10/11 64-bit, an NVIDIA GPU with 12 GB or more (16 GB+ recommended,
@@ -50,7 +50,7 @@ PORTABLE
 LICENCES
   The YuE2, SheetSage2 and MERT model weights are licensed CC BY-NC 4.0
   (non-commercial use only); their licence files are in models\\<name>\\ after
-  Setup has run. The YuE2 code is Apache-2.0. Gokuk's score reader is adapted
+  Setup has run. The YuE2 code is Apache-2.0. Ceonggo's score reader is adapted
   from YuE2's abc_tools.py; see licences\\.
 """
 
@@ -64,8 +64,8 @@ def main() -> int:
     for cache in (ROOT / "workers").rglob("__pycache__"):
         shutil.rmtree(cache, ignore_errors=True)
     run([sys.executable, "-m", "PyInstaller", "--noconfirm", "--clean",
-         "--distpath", str(DIST), "--workpath", str(BUILD), "Gokuk.spec"])
-    out = DIST / "Gokuk"
+         "--distpath", str(DIST), "--workpath", str(BUILD), "Ceonggo.spec"])
+    out = DIST / "Ceonggo"
     for cache in out.rglob("__pycache__"):
         shutil.rmtree(cache, ignore_errors=True)
     (out / "README.txt").write_text(README.format(version=VERSION), encoding="utf-8")
@@ -76,11 +76,11 @@ def main() -> int:
     shutil.copytree(ROOT / "licences", out / "licences", dirs_exist_ok=True)
 
     RELEASE.mkdir(exist_ok=True)
-    archive = RELEASE / f"Gokuk-v{VERSION}.zip"
+    archive = RELEASE / f"Ceonggo-v{VERSION}.zip"
     with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as z:
         for file in sorted(out.rglob("*")):
             if file.is_file():
-                z.write(file, Path("Gokuk") / file.relative_to(out))
+                z.write(file, Path("Ceonggo") / file.relative_to(out))
     print(f"\nRelease: {archive}  ({archive.stat().st_size / 2**20:.0f} MB)")
     return 0
 

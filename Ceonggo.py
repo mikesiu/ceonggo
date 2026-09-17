@@ -1,8 +1,8 @@
-"""Gokuk - make songs from style and lyrics, and covers from recordings.
+"""Ceonggo - make songs from style and lyrics, and covers from recordings.
 
-Start it with:   python Gokuk.py   (or double-click Gokuk.exe)
+Start it with:   python Ceonggo.py   (or double-click Ceonggo.exe)
 
-Needs Gokuk Setup to have run first; if it hasn't, Gokuk says so and offers to
+Needs Ceonggo Setup to have run first; if it hasn't, Ceonggo says so and offers to
 open it.
 """
 from __future__ import annotations
@@ -31,22 +31,22 @@ def _report_fatal(error: BaseException) -> None:
     except Exception:
         pass
     message = (
-        "Gokuk could not start.\n\n"
+        "Ceonggo could not start.\n\n"
         f"{type(error).__name__}: {error}\n\n"
-        "If this keeps happening, run Gokuk.bat from a Command Prompt to see the full message."
+        "If this keeps happening, run Ceonggo.bat from a Command Prompt to see the full message."
     )
     try:
         from PySide6.QtWidgets import QApplication, QMessageBox
 
         app = QApplication.instance() or QApplication([])
-        box = QMessageBox(QMessageBox.Critical, "Gokuk", message)
+        box = QMessageBox(QMessageBox.Critical, "Ceonggo", message)
         box.setDetailedText(details)
         box.exec()
     except Exception:
         try:
             import ctypes
 
-            ctypes.windll.user32.MessageBoxW(0, message, "Gokuk", 0x10)
+            ctypes.windll.user32.MessageBoxW(0, message, "Ceonggo", 0x10)
         except Exception:
             pass
 
@@ -64,11 +64,11 @@ def not_installed(install) -> bool:
     else:
         detail = t("The music engine and its models (about 16 GB) need to be downloaded first.")
     box = QMessageBox()
-    box.setWindowTitle("Gokuk")
+    box.setWindowTitle("Ceonggo")
     box.setIcon(QMessageBox.Information)
-    box.setText(t("Gokuk isn't installed yet"))
-    box.setInformativeText(detail + "\n\n" + t("Gokuk Setup does this for you, with progress shown."))
-    open_btn = box.addButton(t("Open Gokuk Setup"), QMessageBox.AcceptRole)
+    box.setText(t("Ceonggo isn't installed yet"))
+    box.setInformativeText(detail + "\n\n" + t("Ceonggo Setup does this for you, with progress shown."))
+    open_btn = box.addButton(t("Open Ceonggo Setup"), QMessageBox.AcceptRole)
     open_btn.setObjectName("Primary")
     box.addButton(t("Quit"), QMessageBox.RejectRole)
     box.exec()
@@ -78,22 +78,22 @@ def not_installed(install) -> bool:
 
 
 def _smoke_shot(app, window) -> None:
-    """GOKUK_SMOKE_SHOT=<png>: save a screenshot of the window, then quit.
+    """CEONGGO_SMOKE_SHOT=<png>: save a screenshot of the window, then quit.
 
     Lets an automated check confirm a windowed build really draws its window.
     """
     import os
 
-    target = os.environ.get("GOKUK_SMOKE_SHOT")
+    target = os.environ.get("CEONGGO_SMOKE_SHOT")
     if not target:
         return
     from PySide6.QtCore import QTimer
 
-    if not os.environ.get("GOKUK_SMOKE_CREATE"):
+    if not os.environ.get("CEONGGO_SMOKE_CREATE"):
         QTimer.singleShot(3000, lambda: (window.grab().save(target), app.quit()))
         return
 
-    # GOKUK_SMOKE_CREATE=1: also make one song from the sample lyrics, then
+    # CEONGGO_SMOKE_CREATE=1: also make one song from the sample lyrics, then
     # screenshot and quit - proves a built exe can drive the engine end to end.
     def wait() -> None:
         if window.engine.busy:
@@ -124,8 +124,8 @@ def main() -> int:
     from app.ui import theme
 
     app = QApplication(sys.argv)
-    app.setApplicationName("Gokuk")
-    app.setOrganizationName("Gokuk")
+    app.setApplicationName("Ceonggo")
+    app.setOrganizationName("Ceonggo")
     i18n.start()
     theme.apply(app)
 

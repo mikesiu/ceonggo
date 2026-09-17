@@ -15,7 +15,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-SOURCES = ["Gokuk.py", "GokukSetup.py", "app", "setup"]
+SOURCES = ["Ceonggo.py", "CeonggoSetup.py", "app", "setup"]
 
 
 def literal(node) -> str | None:

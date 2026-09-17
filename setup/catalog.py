@@ -1,4 +1,4 @@
-"""What Gokuk Setup can install, read from setup/catalog.json.
+"""What Ceonggo Setup can install, read from setup/catalog.json.
 
 The catalogue is written by tools/build_manifest.py and ships with the
 program. Every download in it is pinned - a URL, a size, and a sha256 - so a

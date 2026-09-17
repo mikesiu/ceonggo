@@ -10,14 +10,14 @@ ROOT = Path(__file__).resolve().parent.parent
 
 
 def test_paths_follow_root_override(tmp_path, monkeypatch):
-    monkeypatch.setenv("GOKUK_ROOT", str(tmp_path))
+    monkeypatch.setenv("CEONGGO_ROOT", str(tmp_path))
     assert paths.root() == tmp_path.resolve()
     assert paths.yue2_python() == tmp_path.resolve() / "runtime" / "yue2" / "python.exe"
     assert paths.settings_file().parent == tmp_path.resolve()
 
 
 def test_song_job_uses_profile(tmp_path, monkeypatch):
-    monkeypatch.setenv("GOKUK_ROOT", str(tmp_path))
+    monkeypatch.setenv("CEONGGO_ROOT", str(tmp_path))
     cfg = Config(tmp_path / "settings.json")
     cfg.set("performance", "16")                       # a setting saved by an older version
     job = rq.song_job(cfg, style="s", lyrics="l", cot="melody", seed=5, output_dir=tmp_path / "o", abc="X:1")

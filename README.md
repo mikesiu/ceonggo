@@ -1,4 +1,4 @@
-# Gokuk
+# Ceonggo
 
 A portable Windows app for making music on your own graphics card, built on
 [YuE2](https://github.com/multimodal-art-projection/YuE) (songs) and
@@ -15,16 +15,16 @@ Three tabs, plus a score editor:
 - **Score editor** — see and edit the melody, chords and song parts as a piano roll.
 
 The look and structure follow EasyAI: the same dark theme with an orange accent, a separate
-**Gokuk Setup** program, and English + 繁體中文.
+**Ceonggo Setup** program, and English + 繁體中文.
 
 ## For users
 
-1. Unzip `Gokuk-v1.0.0.zip` somewhere with about 25 GB free (for example `D:\Gokuk`), not inside
+1. Unzip `Ceonggo-v1.0.0.zip` somewhere with about 25 GB free (for example `D:\Ceonggo`), not inside
    OneDrive or Program Files.
-2. Run **Gokuk Setup.exe**. It downloads about 16.5 GB, largest files first, showing the step,
+2. Run **Ceonggo Setup.exe**. It downloads about 16.5 GB, largest files first, showing the step,
    amount, speed, time left, the current file and a checklist. Cancel any time; running it again
    carries on from where it stopped.
-3. Run **Gokuk.exe**.
+3. Run **Ceonggo.exe**.
 
 ### What you need
 
@@ -103,12 +103,12 @@ Language, graphics-card mode, audio decoder, and maintenance (repair, log folder
 | Balanced | the singing model is parked in system memory while the sound is mixed |
 | Lowest memory | also mixes and decodes in smaller pieces (automatic below 24 GB) |
 
-If a song still runs out of memory, Gokuk retries it once in Lowest memory mode.
+If a song still runs out of memory, Ceonggo retries it once in Lowest memory mode.
 
 ## How it is put together
 
 ```
-Gokuk.exe / Gokuk Setup.exe   PySide6 windows (no torch inside)
+Ceonggo.exe / Ceonggo Setup.exe   PySide6 windows (no torch inside)
 runtime/yue2/                 standalone Python 3.12 + torch 2.10 cu128 + yue2-infer 0.1.6
 runtime/sheetsage/            standalone Python 3.11 + torch 2.8 cu128 (SheetSage2's pinned versions)
 runtime/ffmpeg/, runtime/uv/  FFmpeg 6.1 shared, uv
@@ -150,8 +150,8 @@ workers/                      the scripts the downloaded Pythons run
 ```bash
 pip install -r requirements-build.txt
 python -m pytest tests -q                 # 83 tests, no GPU needed
-python Gokuk.py                           # or Gokuk.bat / GokukSetup.bat
-set GOKUK_ROOT=D:\somewhere               # point either program at another portable folder
+python Ceonggo.py                           # or Ceonggo.bat / CeonggoSetup.bat
+set CEONGGO_ROOT=D:\somewhere               # point either program at another portable folder
 ```
 
 Maintainer tools:
@@ -159,12 +159,12 @@ Maintainer tools:
 ```bash
 python tools/build_manifest.py            # re-pin downloads -> setup/catalog.json + setup/locks/
 python tools/extract_strings.py           # translation coverage for lang/zh-Hant.json
-python tools/make_icons.py                # icons (uses Gokuk-Icon.png if present)
-python tools/build_release.py             # dist/Gokuk + release/Gokuk-v1.0.0.zip
+python tools/make_icons.py                # icons (uses Ceonggo-Icon.png if present)
+python tools/build_release.py             # dist/Ceonggo + release/Ceonggo-v1.0.0.zip
 ```
 
-`GOKUK_SMOKE_SHOT=<png>` makes either exe screenshot its window and quit; adding
-`GOKUK_SMOKE_CREATE=1` to `Gokuk.exe` makes it generate one song first. Both are how the built exes
+`CEONGGO_SMOKE_SHOT=<png>` makes either exe screenshot its window and quit; adding
+`CEONGGO_SMOKE_CREATE=1` to `Ceonggo.exe` makes it generate one song first. Both are how the built exes
 are smoke-tested.
 
 The tests cover the score core hardest, because a wrong score is the one bug a user could not

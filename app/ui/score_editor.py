@@ -947,7 +947,7 @@ class ScoreEditor(QDialog):
             text = Path(path).read_text(encoding="utf-8-sig")
             new = Score.from_abc(text)
         except (OSError, UnicodeDecodeError, abc_dialect.AbcError, UnsupportedScore) as error:
-            QMessageBox.warning(self, t("Open a score"), t("This file is not a score Gokuk can use: {why}", why=error))
+            QMessageBox.warning(self, t("Open a score"), t("This file is not a score Ceonggo can use: {why}", why=error))
             return
         if self.history is None:
             QMessageBox.information(self, t("Open a score"), t("Close this window and open the file from the tab."))

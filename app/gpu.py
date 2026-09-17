@@ -1,6 +1,6 @@
 """What graphics card this machine has, asked of nvidia-smi.
 
-Neither Gokuk nor Gokuk Setup imports torch, so the card is identified the way
+Neither Ceonggo nor Ceonggo Setup imports torch, so the card is identified the way
 the driver itself reports it. nvidia-smi ships with every NVIDIA driver.
 """
 from __future__ import annotations
@@ -74,7 +74,7 @@ def auto_memory(gpu: GPU | None) -> str:
 def verdict(gpu: GPU | None) -> tuple[str, str]:
     """(level, sentence) where level is ok | warn | bad."""
     if gpu is None:
-        return "bad", t("No NVIDIA graphics card found - Gokuk needs one to make music.")
+        return "bad", t("No NVIDIA graphics card found - Ceonggo needs one to make music.")
     if gpu.driver_number and gpu.driver_number < MIN_DRIVER:
         return "bad", t("{name}: the graphics driver ({driver}) is too old. Update it from nvidia.com "
                         "to version {need} or newer.", name=gpu.name, driver=gpu.driver,

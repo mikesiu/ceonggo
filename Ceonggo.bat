@@ -1,10 +1,10 @@
 @echo off
 REM ===================================================================
-REM  Gokuk Setup - run from source (developers). Users run "Gokuk Setup.exe".
+REM  Ceonggo - run from source (developers). Users run Ceonggo.exe instead.
 REM ===================================================================
 setlocal EnableExtensions
 cd /d "%~dp0"
-title Gokuk Setup
+title Ceonggo
 
 set "PY="
 where py >nul 2>nul && set "PY=py"
@@ -22,12 +22,12 @@ if errorlevel 1 (
     %PY% -m pip install -r "%~dp0requirements.txt" || goto :failed
 )
 
-start "Gokuk Setup" %PYW% "%~dp0GokukSetup.py"
+start "Ceonggo" %PYW% "%~dp0Ceonggo.py"
 exit /b 0
 
 :no_python
-echo Python 3.10 or newer is needed to run Gokuk Setup from source.
-echo Most people should use "Gokuk Setup.exe" from the release zip instead.
+echo Python 3.10 or newer is needed to run Ceonggo from source.
+echo Most people should use Ceonggo.exe from the release zip instead.
 pause
 exit /b 1
 
