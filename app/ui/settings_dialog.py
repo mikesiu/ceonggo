@@ -26,9 +26,10 @@ DECODERS = [("standard", N("Standard - best for listening")), ("legacy", N("Benc
 
 
 class SettingsDialog(QDialog):
-    def __init__(self, cfg: Config, parent=None):
+    def __init__(self, cfg: Config, parent=None, busy=None):
         super().__init__(parent)
         self.cfg = cfg
+        self._busy = busy or (lambda: False)
         self.language_changed = False
         self.setWindowTitle(t("Settings"))
         self.resize(560, 560)
@@ -127,6 +128,14 @@ class SettingsDialog(QDialog):
         launch_setup()
 
     def _clean(self) -> None:
+        # cache/tmp is the running worker's TEMP, and cache/jobs holds both its job
+        # file and the path Stop writes its cancel flag to. Clearing either during a
+        # run breaks the song being made and turns Stop into a 20-second hard kill.
+        # Checked on the click, not at build time: a queued take can start meanwhile.
+        if self._busy():
+            QMessageBox.information(self, t("Settings"),
+                                    t("A song is being made - wait for it to finish, or press Stop first."))
+            return
         for name in ("tmp", "jobs", "scores"):
             shutil.rmtree(paths.cache_dir() / name, ignore_errors=True)
         QMessageBox.information(self, t("Settings"), t("Temporary files cleared."))

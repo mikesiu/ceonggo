@@ -149,6 +149,7 @@ def download(
 
     session = _session(token)
     last_error = ""
+    started_with = part.stat().st_size if part.is_file() else 0
 
     for attempt in range(RETRIES):
         have = part.stat().st_size if part.is_file() else 0
@@ -201,11 +202,18 @@ def download(
 
     size = part.stat().st_size if part.is_file() else 0
     if expected_bytes and size != expected_bytes:
+        # A part that did not grow this run cannot grow next run either: the Range
+        # request starts at or past the server's end, it answers 416, and this same
+        # check fails again forever, with no way out but deleting the file by hand.
+        # So a stalled part is dropped; one that is still growing is kept, because
+        # resuming rather than restarting is the point of this function.
+        if size <= started_with:
+            part.unlink(missing_ok=True)
         raise DownloadError(t(
             "{name} finished at the wrong size - expected {expected} bytes, got "
             "{got}.\n\n"
             "The link probably points at a different build of this model. "
-            "The partial file has been kept so nothing is lost.",
+            "Press Install again to retry.",
             name=target.name, expected=f"{expected_bytes:,}", got=f"{size:,}"))
 
     if sha256:

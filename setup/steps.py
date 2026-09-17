@@ -38,7 +38,12 @@ from app.i18n import t
 from setup.catalog import Catalog, Item, human_bytes
 from setup.download import Cancelled, DownloadError, Progress, download, free_space
 
-HEADROOM = 1.2          # unpacking and wheel installs need more than the download
+#: Disk to demand beyond the download size. A wheel is fetched and then installed
+#: as extracted files (uv copies, it does not link), so torch's 2.5 GB exists
+#: twice until the cache is cleared at the end. 1.2 was optimistic enough to let
+#: an install start on a drive that could not finish it; the ~25 GB the README
+#: asks for against ~16.5 GB of downloads is where 1.5 comes from.
+HEADROOM = 1.5
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
 
@@ -332,6 +337,7 @@ def unpack(archive: Path, destination: Path, strip: str | None) -> None:
     """Unpack a .zip or .tar.gz, dropping a single top folder named ``strip``."""
     destination.mkdir(parents=True, exist_ok=True)
     prefix = f"{strip.strip('/')}/" if strip else ""
+    inside = destination.resolve()
 
     def target_for(name: str) -> Path | None:
         name = name.replace("\\", "/")
@@ -341,7 +347,12 @@ def unpack(archive: Path, destination: Path, strip: str | None) -> None:
             name = name[len(prefix):]
         if not name or name.startswith("/") or ".." in Path(name).parts:
             return None
-        return destination / name
+        out = destination / name
+        # The checks above miss a drive-absolute entry ("C:/x"), and joining one
+        # silently discards the destination, so the result is what gets checked.
+        if not out.resolve().is_relative_to(inside):
+            return None
+        return out
 
     if archive.name.endswith(".zip"):
         with zipfile.ZipFile(archive) as z:

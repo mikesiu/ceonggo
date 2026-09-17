@@ -970,7 +970,12 @@ class ScoreEditor(QDialog):
             return
         if not path.lower().endswith(".abc"):
             path += ".abc"
-        Path(path).write_text(text, encoding="utf-8")
+        try:
+            Path(path).write_text(text, encoding="utf-8")
+        except OSError as error:
+            QMessageBox.warning(self, t("Save score"),
+                                t("The score could not be saved: {why}", why=error))
+            return
         self.dirty = False
         self.status.setText(t("Saved {path}", path=path))
 

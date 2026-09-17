@@ -31,7 +31,10 @@ class MainWindow(QMainWindow):
         self.cfg = cfg
         self.install = install
         self.library = Library(cfg.songs_dir())
-        self.engine = Engine(self)
+        # The library and the transcription cache hold every song and score; a job
+        # may only ever empty a folder inside them, never one of them.
+        self.engine = Engine(self, protect=[self.library.root, paths.cache_dir() / "scores",
+                                            paths.root()])
         self.gpu = gpu.detect()
         self.setWindowTitle("Ceonggo")
         self.resize(1480, 920)
@@ -219,7 +222,7 @@ class MainWindow(QMainWindow):
             self.cover_tab.create()
 
     def _settings(self) -> None:
-        dialog = SettingsDialog(self.cfg, self)
+        dialog = SettingsDialog(self.cfg, self, busy=lambda: self.engine.busy)
         if dialog.exec() and dialog.language_changed:
             QMessageBox.information(self, t("Settings"), t("The new language is used the next time Ceonggo starts."))
 

@@ -35,6 +35,26 @@ def test_worker_versions_match_the_window():
         assert worker_version(ROOT / "workers" / f"{name}_worker.py") == EXPECTED_WORKER_VERSION
 
 
+def test_clear_folder_never_empties_a_protected_folder(tmp_path):
+    """Retrying a job wipes its output folder, so a wrong output_dir must not be
+    able to name the library and take every song with it."""
+    from app.jobs.engine import _clear_folder
+
+    library = tmp_path / "songs"
+    song = library / "2026-01-01_night"
+    song.mkdir(parents=True)
+    (song / "partial.flac").write_bytes(b"x")
+    (song / "leftovers").mkdir()
+    (library / "another-song").mkdir()
+    protect = {library.resolve()}
+
+    assert _clear_folder(song, protect) is True
+    assert not any(song.iterdir()) and song.is_dir()       # emptied, not removed
+    assert _clear_folder(library, protect) is False
+    assert (library / "another-song").is_dir()             # the library is untouched
+    assert _clear_folder(tmp_path / "gone", protect) is True    # nothing to do
+
+
 def test_gpu_profiles_and_verdict():
     assert gpu.auto_memory(gpu.GPU("A4000", 16376, "581.57")) == "low"
     assert gpu.auto_memory(gpu.GPU("4090", 24564, "581.57")) == "fast"

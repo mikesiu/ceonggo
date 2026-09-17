@@ -11,7 +11,9 @@ eager mode, which is slower but avoids the graph code.
 """
 from __future__ import annotations
 
+import shutil
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Callable
 
 from PySide6.QtCore import QObject, Signal
@@ -38,12 +40,15 @@ class Engine(QObject):
     busy_changed = Signal(bool)
     log_line = Signal(str)
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, protect=()):
         super().__init__(parent)
         self.queue: list[Job] = []
         self.current: Job | None = None
         self.process: WorkerProcess | None = None
         self.last_log = ""
+        #: Folders a job's output_dir must never name, however it was built - see
+        #: _clear_folder. The song library is the one that matters.
+        self.protect = {Path(p).resolve() for p in protect}
 
     @property
     def busy(self) -> bool:
@@ -119,7 +124,11 @@ class Engine(QObject):
         self._after(job)
 
     def _relaunch(self, job: Job) -> None:
-        _clear_folder(job.data.get("output_dir"))
+        output = job.data.get("output_dir")
+        if not _clear_folder(output, self.protect):
+            # The worker will refuse a folder that is not empty, so this surfaces
+            # as a plain failure rather than a wrong retry.
+            self.log_line.emit(f"Refused to empty {output}: it is a protected folder")
         if self.process:
             self.process.deleteLater()
         self._launch(job)
@@ -132,14 +141,25 @@ class Engine(QObject):
             self._next()
 
 
-def _clear_folder(folder) -> None:
-    """A failed run leaves partial files; the worker wants an empty folder."""
-    import shutil
-    from pathlib import Path
+def _clear_folder(folder, protect=frozenset()) -> bool:
+    """A failed run leaves partial files; the worker wants an empty folder.
 
-    if folder and Path(folder).is_dir():
-        for child in Path(folder).iterdir():
-            if child.is_dir():
-                shutil.rmtree(child, ignore_errors=True)
-            else:
-                child.unlink(missing_ok=True)
+    Everything inside is deleted, so the path is checked before anything goes.
+    Callers only ever pass a fresh per-song folder from ``Library.new_folder``,
+    but a wrong ``output_dir`` must not be able to empty the song library itself,
+    so ``protect`` and the drive root are refused. Returns False when it refused.
+    """
+    if not folder:
+        return True
+    path = Path(folder)
+    if not path.is_dir():
+        return True                      # nothing to clear is not a refusal
+    resolved = path.resolve()
+    if resolved in protect or resolved.parent == resolved:
+        return False
+    for child in path.iterdir():
+        if child.is_dir():
+            shutil.rmtree(child, ignore_errors=True)
+        else:
+            child.unlink(missing_ok=True)
+    return True

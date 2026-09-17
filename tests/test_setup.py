@@ -73,6 +73,20 @@ def test_unpack_strips_top_folder(tmp_path):
     assert (tmp_path / "py" / "python.exe").read_bytes() == b"python"
 
 
+def test_unpack_refuses_an_entry_that_escapes(tmp_path):
+    """A drive-absolute name replaces the destination when joined, so "C:/x"
+    lands outside the folder even though it holds no ".." and no leading "/"."""
+    archive = tmp_path / "b.zip"
+    with zipfile.ZipFile(archive, "w") as z:
+        z.writestr("top/bin/good.txt", b"ok")
+        z.writestr("top/C:/escaped.txt", b"no")
+    out = tmp_path / "out"
+    unpack(archive, out, "top")
+    assert (out / "bin" / "good.txt").read_bytes() == b"ok"
+    assert [p.name for p in sorted(out.rglob("*")) if p.is_file()] == ["good.txt"]
+    assert not Path("C:/escaped.txt").exists()
+
+
 class RangeHandler(http.server.SimpleHTTPRequestHandler):
     """Serves files with Range support, which http.server lacks."""
 
@@ -137,6 +151,24 @@ def test_download_cancel_keeps_part(server, tmp_path):
                     should_stop=lambda: target.with_suffix(".bin.part").exists()
                     and target.with_suffix(".bin.part").stat().st_size > 0)
     assert target.with_suffix(".bin.part").exists() and not target.exists()
+
+
+def test_download_drops_a_part_that_cannot_grow(server, tmp_path):
+    """A wrong-size .part used to be kept for ever, so every later run resumed
+    past the server's end, got nothing back, and failed the same check again."""
+    root, base = server
+    (root / "short.bin").write_bytes(b"\xaa" * 800)        # the catalogue says 1000
+    target = tmp_path / "short.bin"
+    part = target.with_suffix(".bin.part")
+
+    with pytest.raises(dl.DownloadError):
+        dl.download(f"{base}/short.bin", target, expected_bytes=1000)
+    assert part.stat().st_size == 800          # it grew this run, so it is kept
+
+    with pytest.raises(dl.DownloadError):
+        dl.download(f"{base}/short.bin", target, expected_bytes=1000)
+    assert not part.exists()                   # it could not grow, so it is dropped
+    assert not target.exists()
 
 
 def test_install_state(tmp_path, monkeypatch):

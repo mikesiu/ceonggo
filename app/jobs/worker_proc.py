@@ -89,6 +89,13 @@ class WorkerProcess(QObject):
         self.worker = worker
         self.job = job
         self.proc = QProcess(self)
+        # Owned by this object so it dies with it. A bare QTimer.singleShot would
+        # still fire after the Engine has deleteLater()'d us, and _kill_if_running
+        # would then touch an already-deleted QProcess - a RuntimeError nobody sees,
+        # because a windowed build has no console to print it to.
+        self._kill_timer = QTimer(self)
+        self._kill_timer.setSingleShot(True)
+        self._kill_timer.timeout.connect(self._kill_if_running)
         self._buffer = b""
         self._ended = False
         self._cancelling = False
@@ -131,7 +138,7 @@ class WorkerProcess(QObject):
             proto.cancel_path(self.job_file).write_text("cancel")
         except OSError:
             pass
-        QTimer.singleShot(KILL_AFTER_MS, self._kill_if_running)
+        self._kill_timer.start(KILL_AFTER_MS)
 
     def _kill_if_running(self) -> None:
         if self.proc.state() != QProcess.NotRunning:
