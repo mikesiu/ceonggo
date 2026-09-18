@@ -118,10 +118,11 @@ app/score/                    read, edit, write and preview scores (stdlib only)
 workers/                      the scripts the downloaded Pythons run
 ```
 
-- **Portable:** there are no venvs, since a venv stores absolute paths. Packages install straight
-  into the standalone Pythons. Every cache and temp folder (`HF_HOME`, `TORCH_HOME`, `TEMP` …)
-  points inside the folder, and nothing goes to `%APPDATA%` or the registry. Proven by moving the
-  runtime to another path and generating from there.
+- **Portable:** the runtimes carry no venvs, since a venv stores absolute paths. Packages install
+  straight into the standalone Pythons. Every cache and temp folder (`HF_HOME`, `TORCH_HOME`,
+  `TEMP` …) points inside the folder, and nothing goes to `%APPDATA%` or the registry. Proven by
+  moving the runtime to another path and generating from there. (Developing in a venv is a separate
+  matter and perfectly fine — see *Developing*.)
 - **Workers:** the window never imports torch. Each job is
   `runtime\…\python.exe workers\<name>_worker.py <job>.json`, reporting progress as JSON lines on
   stdout (`workers/_protocol.py`). To cancel, the window creates `<job>.cancel`. The worker exits
@@ -148,11 +149,18 @@ workers/                      the scripts the downloaded Pythons run
 ## Developing
 
 ```bash
+python -m venv .venv                      # once; .venv is git-ignored
+.venv\Scripts\activate                    # PowerShell: .venv\Scripts\Activate.ps1
 pip install -r requirements-build.txt
-python -m pytest tests -q                 # 83 tests, no GPU needed
-python Ceonggo.py                           # or Ceonggo.bat / CeonggoSetup.bat
-set CEONGGO_ROOT=D:\somewhere               # point either program at another portable folder
+python -m pytest tests -q                 # 89 tests, no GPU needed
+python Ceonggo.py                         # or Ceonggo.bat / CeonggoSetup.bat, which find .venv themselves
+set CEONGGO_ROOT=D:\somewhere             # point either program at another portable folder
 ```
+
+The venv is for developing only — PySide6, pytest and PyInstaller, nothing the engines use. The
+downloaded runtimes under `runtime/` still have no venv, on purpose (see *Portable* above), and a
+venv active in the shell cannot leak into them: the worker and Setup environments drop `VIRTUAL_ENV`
+and every `PYTHON*` variable before starting a runtime.
 
 Maintainer tools:
 

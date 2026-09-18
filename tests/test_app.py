@@ -35,6 +35,21 @@ def test_worker_versions_match_the_window():
         assert worker_version(ROOT / "workers" / f"{name}_worker.py") == EXPECTED_WORKER_VERSION
 
 
+def test_a_dev_venv_cannot_leak_into_a_worker(tmp_path, monkeypatch):
+    """Developing in a venv must not change what a downloaded runtime sees: it has
+    its own packages, and an inherited PYTHONHOME or VIRTUAL_ENV would break it."""
+    monkeypatch.setenv("CEONGGO_ROOT", str(tmp_path))
+    for name in ("VIRTUAL_ENV", "PYTHONPATH", "PYTHONHOME", "CONDA_PREFIX", "TORCH_HOME"):
+        monkeypatch.setenv(name, r"D:\leak")
+
+    from app.jobs.worker_proc import portable_environment
+
+    env = portable_environment()
+    assert not [k for k in env.keys()
+                if k in ("VIRTUAL_ENV", "CONDA_PREFIX", "PYTHONPATH", "PYTHONHOME")]
+    assert env.value("TORCH_HOME") != r"D:\leak"       # repointed inside the portable folder
+
+
 def test_clear_folder_never_empties_a_protected_folder(tmp_path):
     """Retrying a job wipes its output folder, so a wrong output_dir must not be
     able to name the library and take every song with it."""

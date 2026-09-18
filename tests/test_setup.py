@@ -171,6 +171,16 @@ def test_download_drops_a_part_that_cannot_grow(server, tmp_path):
     assert not target.exists()
 
 
+def test_a_dev_venv_cannot_leak_into_setup(tmp_path, monkeypatch):
+    """uv installs into a standalone Python by path; an inherited VIRTUAL_ENV
+    would send the wheels somewhere else entirely."""
+    for name in ("VIRTUAL_ENV", "PYTHONPATH", "PYTHONHOME"):
+        monkeypatch.setenv(name, r"D:\leak")
+    env = Installer(Catalog(ROOT / "setup" / "catalog.json"), tmp_path, []).environment()
+    assert not [k for k in env if k in ("VIRTUAL_ENV", "PYTHONPATH", "PYTHONHOME")]
+    assert env["UV_CACHE_DIR"].startswith(str(tmp_path))
+
+
 def test_install_state(tmp_path, monkeypatch):
     monkeypatch.setenv("CEONGGO_ROOT", str(tmp_path))
     from app.install_state import InstallState

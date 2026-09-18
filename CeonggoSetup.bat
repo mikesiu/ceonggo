@@ -6,23 +6,31 @@ setlocal EnableExtensions
 cd /d "%~dp0"
 title Ceonggo Setup
 
+REM The project's own .venv wins when it exists, so running from source never
+REM installs anything into the system Python. Without one, fall back to the
+REM Python on PATH and install the two window libraries there, as before.
 set "PY="
-where py >nul 2>nul && set "PY=py"
+set "PYW="
+set "VENV=%~dp0.venv\Scripts"
+if exist "%VENV%\python.exe" set "PY=%VENV%\python.exe"
+if exist "%VENV%\pythonw.exe" set "PYW=%VENV%\pythonw.exe"
+
+if not defined PY where py >nul 2>nul && set "PY=py"
 if not defined PY where python >nul 2>nul && set "PY=python"
 if not defined PY goto :no_python
-set "PYW=pyw"
-where pyw >nul 2>nul || set "PYW=%PY%"
 
-%PY% -c "import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)" >nul 2>nul
+"%PY%" -c "import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)" >nul 2>nul
 if errorlevel 1 goto :no_python
 
-%PY% -c "import PySide6, requests" >nul 2>nul
+"%PY%" -c "import PySide6, requests" >nul 2>nul
 if errorlevel 1 (
     echo Installing the window libraries once...
-    %PY% -m pip install -r "%~dp0requirements.txt" || goto :failed
+    "%PY%" -m pip install -r "%~dp0requirements.txt" || goto :failed
 )
 
-start "Ceonggo Setup" %PYW% "%~dp0CeonggoSetup.py"
+if not defined PYW where pyw >nul 2>nul && set "PYW=pyw"
+if not defined PYW set "PYW=%PY%"
+start "Ceonggo Setup" "%PYW%" "%~dp0CeonggoSetup.py"
 exit /b 0
 
 :no_python
