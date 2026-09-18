@@ -20,7 +20,12 @@ from PySide6.QtCore import QObject, Signal
 
 from app.jobs.worker_proc import WorkerProcess
 
-RETRY_HINTS = ("cuda graph", "cudagraph", "cudnn", "graphar", "flash", "cublas", "_scaled_mm")
+#: Substrings that mean "the fast path broke", not "the song was impossible". The
+#: ROCm ones are there because AMD's attention kernels name themselves rather than
+#: their family: a failure reads "[ROCm] mha_varlen_fwd: seqused_k must be nullopt",
+#: which matches none of the CUDA words and so was never retried.
+RETRY_HINTS = ("cuda graph", "cudagraph", "cudnn", "graphar", "flash", "cublas", "_scaled_mm",
+               "mha_varlen", "rocm", "hip error", "miopen", "no available kernel")
 
 
 @dataclass

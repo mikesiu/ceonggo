@@ -70,6 +70,50 @@ def test_clear_folder_never_empties_a_protected_folder(tmp_path):
     assert _clear_folder(tmp_path / "gone", protect) is True    # nothing to do
 
 
+def test_amd_cards_are_judged_without_the_nvidia_driver_gate():
+    amd = gpu.GPU("AMD Radeon AI PRO R9700", 32624, "32.0.31041.1004", "amd")
+    assert round(amd.vram_gib) == 32 and amd.vendor == "amd"
+    # 32.0.x is a Windows build number, not a ROCm one - comparing it to R570 would
+    # condemn every AMD card, so driver_number stays 0.0 and the gate never fires.
+    assert amd.driver_number == 0.0
+    assert gpu.auto_memory(amd) == "fast"
+    assert gpu.verdict(amd)[0] == "ok"
+    assert gpu.verdict(gpu.GPU("Radeon", 12288, "31.0.1", "amd"))[0] == "warn"
+
+
+def test_backend_picks_eager_on_amd(tmp_path, monkeypatch):
+    """YuE2's CUDA-graph path is a pessimisation on ROCm: the same song measured
+    293.6s through it against 151.2s eager, so AMD must not get it by default."""
+    monkeypatch.setenv("CEONGGO_ROOT", str(tmp_path))
+    cfg = Config(tmp_path / "settings.json")
+    nvidia = gpu.GPU("RTX A4000", 16376, "581.57", "nvidia")
+    amd = gpu.GPU("AMD Radeon AI PRO R9700", 32624, "32.0.31041.1004", "amd")
+
+    monkeypatch.setattr(gpu, "detect", lambda: nvidia)
+    assert rq.backend(cfg) == "torch"
+    monkeypatch.setattr(gpu, "detect", lambda: amd)
+    assert rq.backend(cfg) == "torch-eager"
+    assert rq.song_job(cfg, style="s", lyrics="l", cot="full", seed=1,
+                       output_dir=tmp_path)["backend"] == "torch-eager"
+    cfg.set("backend", "torch-eager")          # an explicit choice is still honoured
+    assert rq.backend(cfg) == "torch-eager"
+    monkeypatch.setattr(gpu, "detect", lambda: None)
+    cfg.set("backend", "torch")
+    assert rq.backend(cfg) == "torch"          # no card, nothing to second-guess
+
+
+def test_rocm_failures_reach_the_eager_retry():
+    """ROCm names the kernel that failed, not the CUDA family it belongs to, so
+    none of the original hints matched and the fast path failed without retrying."""
+    from app.jobs.engine import RETRY_HINTS
+
+    for message in ("RuntimeError: [ROCm] mha_varlen_fwd: seqused_k must be nullopt",
+                    "RuntimeError: No available kernel. Aborting execution.",
+                    "MIOpen Error: could not find a solver",
+                    "HIP error: invalid device function"):
+        assert any(h in message.lower() for h in RETRY_HINTS), message
+
+
 def test_gpu_profiles_and_verdict():
     assert gpu.auto_memory(gpu.GPU("A4000", 16376, "581.57")) == "low"
     assert gpu.auto_memory(gpu.GPU("4090", 24564, "581.57")) == "fast"

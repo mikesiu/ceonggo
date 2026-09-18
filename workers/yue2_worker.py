@@ -95,6 +95,13 @@ def flash_attention_works() -> bool:
     """
     import torch
 
+    if torch.version.hip:
+        # ROCm has the operator, and this probe's own call even succeeds - but the
+        # call GraphAR makes passes seqused_k, which ROCm rejects:
+        #   RuntimeError: [ROCm] mha_varlen_fwd: seqused_k must be nullopt
+        # A probe that answered for itself rather than for the real call would let
+        # the fast path start and then fail on the first song.
+        return False
     try:
         q = torch.zeros(1, 1, 8, dtype=torch.bfloat16, device="cuda")
         cu = torch.tensor([0, 1], dtype=torch.int32, device="cuda")
@@ -105,20 +112,30 @@ def flash_attention_works() -> bool:
 
 
 def patch_attention() -> str:
-    """Steer GraphAR to cuDNN attention where FlashAttention is not built in."""
+    """Steer GraphAR to an attention kernel that exists on this machine.
+
+    Windows CUDA wheels declare FlashAttention without building it, so they are
+    sent to cuDNN. ROCm has neither: flash rejects the seqused_k GraphAR passes,
+    and cuDNN attention raises "No available kernel. Aborting execution." SDPA is
+    the one of GraphAR's four choices that works there, so AMD always gets it -
+    including over an explicit "cudnn", which would only fail later.
+    """
+    import torch
+
     if flash_attention_works():
         return "flash"
+    target = "sdpa" if torch.version.hip else "cudnn"
     from yue2 import cuda_graph
 
     original = cuda_graph.GraphAR.__init__
 
     def init(self, *args, attention_backend="auto", **kwargs):
-        if attention_backend in ("auto", "flash"):
-            attention_backend = "cudnn"
+        if target == "sdpa" or attention_backend in ("auto", "flash"):
+            attention_backend = target
         original(self, *args, attention_backend=attention_backend, **kwargs)
 
     cuda_graph.GraphAR.__init__ = init
-    return "cudnn"
+    return target
 
 
 #: What each memory mode changes. They trade speed for memory, not quality: offload_ar parks the language model in system RAM while the
@@ -159,7 +176,8 @@ def run(job: dict) -> int:
     output.mkdir(parents=True, exist_ok=True)
 
     if not torch.cuda.is_available():
-        raise RuntimeError("CUDA is not available - Ceonggo needs an NVIDIA graphics card")
+        raise RuntimeError("No GPU is available to this runtime - Ceonggo needs an NVIDIA or AMD "
+                           "graphics card (torch.cuda covers both; ROCm reports through it too)")
     props = torch.cuda.get_device_properties(0)
     proto.emit("hello", worker="yue2", torch=torch.__version__, gpu=props.name,
                vram_gib=round(props.total_memory / 2**30, 1))

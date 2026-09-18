@@ -65,6 +65,14 @@ class SettingsDialog(QDialog):
         layout.addWidget(QLabel(t("Speed mode")))
         self.backend = self._combo(BACKENDS, cfg.get("backend"))
         layout.addWidget(self.backend)
+        if card is not None and card.vendor == "amd":
+            # Fast resolves to Safe on AMD (see requests.backend); say so rather
+            # than letting the box claim a mode the card never actually runs.
+            amd = QLabel(t("On AMD cards the safe path is also the faster one, so it is used "
+                           "whichever is picked here."))
+            amd.setObjectName("Hint")
+            amd.setWordWrap(True)
+            layout.addWidget(amd)
         layout.addWidget(QLabel(t("Audio decoder")))
         self.decoder = self._combo(DECODERS, cfg.get("decoder"))
         if not (paths.models_dir() / "YuE2-Vae-legacy" / "model.safetensors").is_file():

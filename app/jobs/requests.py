@@ -20,6 +20,23 @@ def memory_mode(cfg: Config) -> str:
     return gpu.auto_memory(gpu.detect())
 
 
+def backend(cfg: Config) -> str:
+    """Which decoding path the worker should take.
+
+    "torch" drives YuE2's CUDA-graph decoder, the fastest thing on an NVIDIA card.
+    On AMD it is a pessimisation: ROCm has no graph-friendly attention kernel, so
+    GraphAR falls back to SDPA and captures it anyway. Measured on a Radeon AI PRO
+    R9700, the same song took 293.6s that way against 151.2s in eager mode - the
+    singing stage alone went from 96.4s to 28.0s. So an AMD card gets eager unless
+    the user has deliberately picked something else in Settings.
+    """
+    choice = cfg.get("backend", "torch")
+    if choice != "torch":
+        return choice
+    card = gpu.detect()
+    return "torch-eager" if card is not None and card.vendor == "amd" else choice
+
+
 def new_seed() -> int:
     return random.randint(1, 2**31 - 1)
 
@@ -49,7 +66,7 @@ def song_job(cfg: Config, *, style: str, lyrics: str, cot: str, seed: int, outpu
         "model_dir": str(paths.models_dir() / "YuE2-3B"),
         "vae_dir": str(paths.models_dir() / decoder),
         "memory": memory_mode(cfg),
-        "backend": cfg.get("backend", "torch"), "verify_hashes": False,
+        "backend": backend(cfg), "verify_hashes": False,
     }
 
 
@@ -94,7 +111,7 @@ def friendly_error(event: dict) -> str:
         return t("The graphics card ran out of memory, even in the lowest-memory mode. Close other "
                  "programs that use the GPU (games, browsers, video apps) or try shorter lyrics.")
     if kind == "no_gpu":
-        return t("No NVIDIA graphics card is available to the engine. Check the driver is installed.")
+        return t("No supported graphics card is available to the engine. Check the driver is installed.")
     if kind == "driver":
         return t("The graphics driver is too old for the engine. Update it from nvidia.com.")
     if kind == "missing_files":
