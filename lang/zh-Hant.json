@@ -48,7 +48,7 @@
  "Chord at bar {bar}, beat {beat} (for example C, Am7, F/A, G7sus4):": "第 {bar} 小節第 {beat} 拍的和弦（例如 C、Am7、F/A、G7sus4）：",
  "City pop": "City pop",
  "Clear temporary files": "清除暫存檔",
- "Click to add a note · drag to move · drag its right edge to change length · Delete removes · ↑/↓ change pitch · Shift-drag selects several · click the chord lane to add a chord · right-click bars and parts for more": "點擊加入音符 · 拖曳移動 · 拖曳右邊緣改變長度 · Delete 刪除 · ↑/↓ 改變音高 · Shift 拖曳多選 · 點擊和弦列加入和弦 · 右鍵點擊小節及段落有更多選項",
+ "Click to add a note · drag to move · drag its right edge to change length · Delete removes · ↑/↓ change pitch · Shift-drag selects several · click the chord lane to add a chord · click the bar numbers or press ←/→/Home to move the play line · right-click bars and parts for more": "點擊加入音符 · 拖曳移動 · 拖曳右邊緣改變長度 · Delete 刪除 · ↑/↓ 改變音高 · Shift 拖曳多選 · 點擊和弦列加入和弦 · 點擊小節編號或按 ←/→/Home 移動播放線 · 右鍵點擊小節及段落有更多選項",
  "Close": "關閉",
  "Close this window and open the file from the tab.": "請關閉此視窗，再從分頁開啟檔案。",
  "Compose melody and chords first (best)": "先創作旋律及和弦（最佳）",

@@ -747,7 +747,8 @@ class ScoreEditor(QDialog):
 
         self.hint = QLabel(t("Click to add a note · drag to move · drag its right edge to change length · "
                              "Delete removes · ↑/↓ change pitch · Shift-drag selects several · "
-                             "click the chord lane to add a chord · right-click bars and parts for more"))
+                             "click the chord lane to add a chord · click the bar numbers or press "
+                             "←/→/Home to move the play line · right-click bars and parts for more"))
         self.hint.setObjectName("Hint")
         self.hint.setWordWrap(True)
         layout.addWidget(self.hint)
@@ -1034,11 +1035,51 @@ class ScoreEditor(QDialog):
         self.player.setPosition(int(seconds * 1000))
         self.player.play()
 
+    def keyPressEvent(self, event) -> None:
+        """←/→/Home work the play line like a transport.
+
+        Handled here rather than as QShortcuts so the ABC text view keeps its own
+        arrow keys: a dialog only sees what the focused widget did not consume.
+        """
+        moves = {Qt.Key_Home: None, Qt.Key_Left: -1, Qt.Key_Right: 1}
+        if event.key() in moves and not self.advanced.isChecked():
+            self._move_playhead(moves[event.key()])
+            event.accept()
+            return
+        super().keyPressEvent(event)
+
+    def _move_playhead(self, bars: int | None) -> None:
+        """Home (``None``) and ←/→ move the play line by whole bars.
+
+        Until now the only way was clicking the bar-number ruler, which is a thin
+        target and was not mentioned in the hint line, so the play line looked
+        stuck where it was.
+        """
+        if not self.canvas or not self.score:
+            return
+        if bars is None:
+            bar = 0
+        else:
+            here = self.score.bar_of(self.canvas.playhead)
+            # Going back from mid-bar lands on this barline first, as a transport does.
+            back_to_barline = bars < 0 and self.canvas.playhead > self.score.bar_start(here)
+            bar = here if back_to_barline else here + bars
+            bar = max(0, min(bar, self.score.bars - 1))
+        time = self.score.bar_start(bar)
+        self.canvas.playhead = time
+        self.canvas.ensure_visible(time)
+        self.canvas.update()
+        self._seek(time)
+
     def _stop(self) -> None:
         if self.player.playbackState() != QMediaPlayer.StoppedState:
             self.player.pause()
 
     def _seek(self, time: Fraction) -> None:
+        # Dragging the playhead moves where playback counts from, so the latency
+        # clamp in _on_position follows it. Without this a seek backwards was
+        # pulled straight back to wherever Play had originally started.
+        self._play_from = time
         if self.player.playbackState() == QMediaPlayer.PlayingState and self.score:
             self.player.setPosition(int(float(time) * 60 / self.score.bpm * 1000))
 
