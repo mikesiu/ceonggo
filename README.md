@@ -146,6 +146,30 @@ workers/                      the scripts the downloaded Pythons run
 | `pretty_midi` is source-only | built offline during Setup with the locked setuptools |
 | SheetSage2's CUDA 12.6 build has no RTX 50-series (`sm_120`) code | both runtimes use CUDA 12.8 builds, which still include Ampere and Ada |
 
+### AMD cards (ROCm) — working, but not yet installable
+
+Verified end to end on a **Radeon AI PRO R9700** (RDNA4, `gfx1201`, 32 GB) under Windows:
+a 59.7 s song in 151 s, and a 3:26 recording transcribed in 49 s. Both runtimes run on
+AMD's Windows ROCm wheels (`rocm.nightlies.amd.com/v2/gfx120X-all`), which cover the
+`cp312` and `cp311` this project needs. `yue2-infer` is pure Python, and SheetSage2
+needed no changes at all.
+
+What the code does differently on AMD:
+
+| | |
+|---|---|
+| Detection | no `nvidia-smi` ships with a Radeon driver, and WMI's `AdapterRAM` is 32-bit (a 32 GB card reads as 4 GB), so `gpu.py` reads `HardwareInformation.qwMemorySize` from the display-adapter registry |
+| Driver gate | AMD's `32.0.x` is a Windows build number, not a ROCm version, so the R570 check is skipped rather than failed |
+| Attention | ROCm rejects the `seqused_k` `GraphAR` passes to FlashAttention, and cuDNN attention raises "No available kernel", so `patch_attention` steers AMD to SDPA |
+| Decoder path | the CUDA-graph decoder is a *pessimisation* here — 293.6 s against 151.2 s eager on the same song — so `requests.backend` defaults AMD to `torch-eager` |
+| Retries | ROCm names the failing kernel rather than its family, so `RETRY_HINTS` carries `mha_varlen`, `rocm`, `miopen` and `no available kernel` |
+| Playback | over Remote Desktop audio is redirected to the client and buffers ~250 ms, so the score editor draws its playhead that far behind the player's clock |
+
+**Not done:** `setup/catalog.json` and `tools/build_manifest.py` still pin only `+cu128`
+wheels, so Setup cannot build an AMD install — `runtime/yue2` and `runtime/sheetsage`
+have to be populated by hand. MIOpen's kernel cache also costs about 3x on the first
+decode until it warms.
+
 ## Developing
 
 ```bash
