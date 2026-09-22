@@ -9,7 +9,7 @@ from pathlib import Path
 
 from PySide6.QtCore import QRectF, Qt, QUrl, Signal
 from PySide6.QtGui import QColor, QPainter
-from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer
+from PySide6.QtMultimedia import QAudioOutput, QMediaDevices, QMediaPlayer
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QSlider, QVBoxLayout, QWidget
 
 from app.i18n import t
@@ -130,7 +130,36 @@ class PlayerBar(QFrame):
         self.player.positionChanged.connect(self._on_position)
         self.player.durationChanged.connect(lambda d: self.length.setText(clock(d)))
         self.player.playbackStateChanged.connect(self._on_state)
+        self.player.errorOccurred.connect(self._on_error)
         self.play_btn.setEnabled(False)
+
+    # --- output ----------------------------------------------------------
+    @staticmethod
+    def output_devices() -> list[str]:
+        """Descriptions of every audio output, the system default first."""
+        return [d.description() for d in QMediaDevices.audioOutputs()]
+
+    def set_output_device(self, description: str = "") -> None:
+        """Send sound to a named output, or to the Windows default when empty.
+
+        Qt follows the Windows default, which is not always where the user is
+        listening: a USB S/PDIF adapter can hold the default while the speakers
+        are on the monitor, and then a song plays perfectly to nowhere. There is
+        no error to report in that case, so the only cure is letting them choose.
+        """
+        if description:
+            for device in QMediaDevices.audioOutputs():
+                if device.description() == description:
+                    self.audio.setDevice(device)
+                    return
+        self.audio.setDevice(QMediaDevices.defaultAudioOutput())
+
+    def _on_error(self, error, text: str) -> None:
+        """Nothing was connected to errorOccurred, so a file Qt could not decode
+        just sat there looking idle. Say so where the style line goes."""
+        if error != QMediaPlayer.NoError:
+            self.subtitle.setText(t("This song could not be played: {why}",
+                                    why=text or str(error)))
 
     def load(self, song: Song, autoplay: bool = True) -> None:
         if not song.has_audio:

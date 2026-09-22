@@ -22,6 +22,7 @@ from datetime import datetime
 from pathlib import Path
 
 from app import paths
+from app.i18n import t
 
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 TRASH = "_trash"
@@ -197,8 +198,8 @@ def export(song: Song, target: Path) -> Path:
         return target
     ffmpeg = paths.ffmpeg_bin() / "ffmpeg.exe"
     if not ffmpeg.is_file():
-        raise FileNotFoundError("FFmpeg is part of the Cover maker - install it with Ceonggo Setup "
-                                "to export WAV or MP3.")
+        raise FileNotFoundError(t("FFmpeg is part of the Cover maker - install it with Ceonggo "
+                                  "Setup to export WAV or MP3."))
     codec = ["-c:a", "libmp3lame", "-b:a", "320k"] if suffix == ".mp3" else ["-c:a", "pcm_s24le"]
     title = ["-metadata", f"title={song.title}"]
     result = subprocess.run([str(ffmpeg), "-y", "-v", "error", "-i", str(song.audio), *codec, *title,

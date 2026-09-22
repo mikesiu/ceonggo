@@ -79,6 +79,22 @@ class SettingsDialog(QDialog):
             self.decoder.model().item(1).setEnabled(False)
         layout.addWidget(self.decoder)
 
+        layout.addWidget(QLabel(t("Sound output")))
+        self.audio_device = QComboBox()
+        self.audio_device.addItem(t("System default"), "")
+        # Imported here, not at module scope: Setup ships without QtMultimedia.
+        from app.ui.player_bar import PlayerBar
+
+        for name in PlayerBar.output_devices():
+            self.audio_device.addItem(name, name)
+        self.audio_device.setCurrentIndex(max(0, self.audio_device.findData(cfg.get("audio_device", ""))))
+        layout.addWidget(self.audio_device)
+        device_note = QLabel(t("Pick a device if songs play silently - Windows may be sending sound "
+                               "somewhere you are not listening."))
+        device_note.setObjectName("Hint")
+        device_note.setWordWrap(True)
+        layout.addWidget(device_note)
+
         layout.addSpacing(6)
         layout.addWidget(heading(t("Maintenance")))
         box, inner = panel(12, 8)
@@ -124,6 +140,7 @@ class SettingsDialog(QDialog):
         self.cfg.set("performance", self.performance.currentData())
         self.cfg.set("backend", self.backend.currentData())
         self.cfg.set("decoder", self.decoder.currentData())
+        self.cfg.set("audio_device", self.audio_device.currentData() or "")
         self.cfg.save()
         code = self.language.currentData()
         if code != i18n.current():

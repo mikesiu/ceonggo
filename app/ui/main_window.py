@@ -48,6 +48,7 @@ class MainWindow(QMainWindow):
 
     def _build(self) -> None:
         self.player = PlayerBar()       # first: the tabs' song cards connect to it
+        self.player.set_output_device(self.cfg.get("audio_device", ""))
         page = QWidget()
         outer = QVBoxLayout(page)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -223,7 +224,10 @@ class MainWindow(QMainWindow):
 
     def _settings(self) -> None:
         dialog = SettingsDialog(self.cfg, self, busy=lambda: self.engine.busy)
-        if dialog.exec() and dialog.language_changed:
+        accepted = dialog.exec()
+        if accepted:
+            self.player.set_output_device(self.cfg.get("audio_device", ""))
+        if accepted and dialog.language_changed:
             QMessageBox.information(self, t("Settings"), t("The new language is used the next time Ceonggo starts."))
 
     def closeEvent(self, event) -> None:
