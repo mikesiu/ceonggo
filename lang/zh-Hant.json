@@ -303,6 +303,7 @@
  "That would move notes out of range.": "這樣會令音符超出音域範圍。",
  "The AI listens to the song and writes its melody as a score. Takes about a minute.": "AI 會聆聽歌曲，把旋律寫成樂譜。約需一分鐘。",
  "The Cover maker is not installed - add it with Ceonggo Setup.": "未安裝翻唱製作 - 請用 Ceonggo 安裝程式加入。",
+ "The Cover maker is not installed, so a recording cannot be listened to. You can still load a score file below and make a cover from it.": "未安裝翻唱製作，因此無法聆聽錄音。你仍可在下方載入樂譜檔，並用它製作翻唱。",
  "The Python runtime for {name} is missing - run Setup again.": "{name} 的 Python 執行環境遺失 - 請再次執行安裝程式。",
  "The download list is missing:\n{path}\n\nRe-download the Ceonggo folder.": "下載清單遺失：\n{path}\n\n請重新下載 Ceonggo 資料夾。",
  "The engine is busy - wait for the current job, or press Stop.": "引擎忙碌中 - 請等候目前的工作完成，或按「停止」。",

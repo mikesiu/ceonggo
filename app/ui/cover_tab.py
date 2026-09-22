@@ -144,6 +144,14 @@ class CoverTab(QWidget):
         self.transcribe_btn.setFixedHeight(40)
         self.transcribe_btn.clicked.connect(self._transcribe)
         s2.addWidget(self.transcribe_btn)
+        # A disabled button with the reason hidden in a tooltip looks like nothing
+        # happened, so the reason is on the tab - along with the way round it.
+        self.no_cover = QLabel(t("The Cover maker is not installed, so a recording cannot be listened "
+                                 "to. You can still load a score file below and make a cover from it."))
+        self.no_cover.setObjectName("Warning")
+        self.no_cover.setWordWrap(True)
+        self.no_cover.setVisible(False)
+        s2.addWidget(self.no_cover)
         self.t_progress = ProgressCard(rq.TRANSCRIBE_STAGES, TRANSCRIBE_WEIGHT)
         self.t_progress.setVisible(False)
         self.t_progress.cancel_clicked.connect(self.window_.engine.cancel_all)
@@ -257,6 +265,7 @@ class CoverTab(QWidget):
         has_cover = self.window_.install.has("cover")
         self.preview_btn.setEnabled(bool(self.source))
         self.transcribe_btn.setEnabled(bool(self.source) and not busy and has_cover)
+        self.no_cover.setVisible(not has_cover)
         if not has_cover:
             self.transcribe_btn.setToolTip(t("The Cover maker is not installed - add it with Ceonggo Setup."))
         self.view_score.setEnabled(bool(self.score_text))
