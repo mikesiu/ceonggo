@@ -6,7 +6,7 @@ import subprocess
 import sys
 
 from PySide6.QtWidgets import (
-    QComboBox, QDialog, QHBoxLayout, QLabel, QMessageBox, QPushButton, QVBoxLayout,
+    QComboBox, QDialog, QHBoxLayout, QLabel, QMessageBox, QPushButton, QSpinBox, QVBoxLayout,
 )
 
 from app import gpu, i18n, paths
@@ -95,6 +95,25 @@ class SettingsDialog(QDialog):
         device_note.setWordWrap(True)
         layout.addWidget(device_note)
 
+        sync_row = QHBoxLayout()
+        sync_row.addWidget(QLabel(t("Playback sync")))
+        sync_row.addStretch(1)
+        self.latency = QSpinBox()
+        self.latency.setRange(-1, 2000)              # -1 shows as Automatic
+        self.latency.setSingleStep(25)
+        self.latency.setSuffix(" ms")
+        self.latency.setSpecialValueText(t("Automatic"))
+        stored = cfg.get("playback_latency_ms")
+        self.latency.setValue(-1 if stored is None else int(stored))
+        sync_row.addWidget(self.latency)
+        layout.addLayout(sync_row)
+        sync_note = QLabel(t("How far the score editor's playhead is drawn behind the player's clock. "
+                             "Automatic measures the device; raise it if the bar still reaches a note "
+                             "before you hear it, which happens over Remote Desktop."))
+        sync_note.setObjectName("Hint")
+        sync_note.setWordWrap(True)
+        layout.addWidget(sync_note)
+
         layout.addSpacing(6)
         layout.addWidget(heading(t("Maintenance")))
         box, inner = panel(12, 8)
@@ -141,6 +160,8 @@ class SettingsDialog(QDialog):
         self.cfg.set("backend", self.backend.currentData())
         self.cfg.set("decoder", self.decoder.currentData())
         self.cfg.set("audio_device", self.audio_device.currentData() or "")
+        self.cfg.set("playback_latency_ms",
+                     None if self.latency.value() < 0 else self.latency.value())
         self.cfg.save()
         code = self.language.currentData()
         if code != i18n.current():

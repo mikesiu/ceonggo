@@ -115,8 +115,12 @@ class MainWindow(QMainWindow):
         """Open the score editor; whatever the user chooses is routed from here."""
         from app.ui.score_editor import ScoreEditor
 
+        override = self.cfg.get("playback_latency_ms")
         dialog = ScoreEditor(text, title=title, actions=actions, primary=primary,
-                             pause_player=self.player.player.pause, parent=self)
+                             pause_player=self.player.player.pause,
+                             audio_device=self.cfg.get("audio_device", ""),
+                             latency_ms=self.player.latency_ms if override is None else int(override),
+                             parent=self)
 
         def chosen(action: str, abc: str) -> None:
             if action == "sing" and on_sing:

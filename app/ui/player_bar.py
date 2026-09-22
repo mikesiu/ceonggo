@@ -79,6 +79,13 @@ class PlayerBar(QFrame):
         self.setStyleSheet(f"QFrame#PlayerBar{{background:{theme.SURFACE};border-top:1px solid {theme.LINE};}}")
         self.song: Song | None = None
         self.file_path = ""                 # set when playing a loose file (the Cover original)
+        self.latency_ms = 0                 # measured in set_output_device
+        self._wanted_device = ""
+        # Connecting to or leaving a Remote Desktop session replaces the whole
+        # output list - and its latency - underneath a running app, so the choice
+        # is re-resolved instead of left pointing at a device that has gone.
+        self._devices = QMediaDevices(self)
+        self._devices.audioOutputsChanged.connect(lambda: self.set_output_device(self._wanted_device))
         self.player = QMediaPlayer(self)
         self.audio = QAudioOutput(self)
         self.player.setAudioOutput(self.audio)
@@ -135,6 +142,37 @@ class PlayerBar(QFrame):
 
     # --- output ----------------------------------------------------------
     @staticmethod
+    def output_latency_ms(device=None) -> int:
+        """How far the player's clock runs ahead of the speakers, in milliseconds.
+
+        ``QMediaPlayer.position()`` reports what has been handed to the sound card,
+        not what has reached the ears; the sink holds a buffer in between. Locally
+        that is small, but over Remote Desktop audio is redirected to the client
+        and the buffer measured 250 ms - about one quaver at 73 BPM, which is
+        exactly how far ahead the score editor's playhead appeared to run.
+
+        Measured rather than assumed, because it is a property of the device.
+        """
+        from PySide6.QtCore import QBuffer, QByteArray
+        from PySide6.QtMultimedia import QAudioFormat, QAudioSink
+
+        fmt = QAudioFormat()
+        fmt.setSampleRate(16000)
+        fmt.setChannelCount(1)
+        fmt.setSampleFormat(QAudioFormat.Int16)
+        try:
+            sink = QAudioSink(device or QMediaDevices.defaultAudioOutput(), fmt)
+            sink.setVolume(0.0)
+            silence = QBuffer(QByteArray(bytes(32000)))
+            silence.open(QBuffer.ReadOnly)
+            sink.start(silence)
+            size = sink.bufferSize()
+            sink.stop()
+        except Exception:      # noqa: BLE001 - a guess of zero beats refusing to play
+            return 0
+        return int(size / (16000 * 2) * 1000) if size > 0 else 0
+
+    @staticmethod
     def output_devices() -> list[str]:
         """Descriptions of every audio output, the system default first."""
         return [d.description() for d in QMediaDevices.audioOutputs()]
@@ -147,12 +185,16 @@ class PlayerBar(QFrame):
         are on the monitor, and then a song plays perfectly to nowhere. There is
         no error to report in that case, so the only cure is letting them choose.
         """
+        self._wanted_device = description
+        chosen = QMediaDevices.defaultAudioOutput()
         if description:
             for device in QMediaDevices.audioOutputs():
                 if device.description() == description:
-                    self.audio.setDevice(device)
-                    return
-        self.audio.setDevice(QMediaDevices.defaultAudioOutput())
+                    chosen = device
+                    break
+        self.audio.setDevice(chosen)
+        #: Re-measured per device: a remote session buffers far more than a local card.
+        self.latency_ms = self.output_latency_ms(chosen)
 
     def _on_error(self, error, text: str) -> None:
         """Nothing was connected to errorOccurred, so a file Qt could not decode

@@ -593,13 +593,19 @@ class ScoreEditor(QDialog):
               "cover": N("Make a cover with this score")}
 
     def __init__(self, text: str, *, title: str, actions: tuple[str, ...] = ("create", "cover"),
-                 primary: str = "create", pause_player=None, parent=None):
+                 primary: str = "create", pause_player=None, audio_device: str = "",
+                 latency_ms: int = 0, parent=None):
         super().__init__(parent)
         self.setWindowTitle(title)
         self.resize(1360, 860)
         self.setMinimumSize(1000, 640)
         self.original_text = text
         self.pause_player = pause_player
+        self.audio_device = audio_device
+        #: position() reports what the sound card has been given, not what has been
+        #: heard, so the playhead is drawn this far behind it. See PlayerBar.
+        self.latency_ms = max(0, int(latency_ms))
+        self._play_from = F(0)
         self.dirty = False
         self._render: PreviewRender | None = None
         self._preview_hash = ""
@@ -768,6 +774,15 @@ class ScoreEditor(QDialog):
 
         self.player = QMediaPlayer(self)
         self.audio = QAudioOutput(self)
+        if self.audio_device:
+            # The preview has its own player, so the device chosen in Settings has
+            # to be applied here too or it would quietly use the system default.
+            from PySide6.QtMultimedia import QMediaDevices
+
+            for device in QMediaDevices.audioOutputs():
+                if device.description() == self.audio_device:
+                    self.audio.setDevice(device)
+                    break
         self.player.setAudioOutput(self.audio)
         self.player.positionChanged.connect(self._on_position)
         self.player.playbackStateChanged.connect(self._on_play_state)
@@ -1014,7 +1029,8 @@ class ScoreEditor(QDialog):
     def _play_from_playhead(self) -> None:
         if self.pause_player:
             self.pause_player()
-        seconds = float(self.canvas.playhead) * 60 / self.score.bpm if self.canvas else 0
+        self._play_from = self.canvas.playhead if self.canvas else F(0)
+        seconds = float(self._play_from) * 60 / self.score.bpm
         self.player.setPosition(int(seconds * 1000))
         self.player.play()
 
@@ -1029,7 +1045,10 @@ class ScoreEditor(QDialog):
     def _on_position(self, ms: int) -> None:
         if not self.canvas or not self.score or self.player.playbackState() != QMediaPlayer.PlayingState:
             return
-        time = F(ms / 1000 * self.score.bpm / 60).limit_denominator(64)
+        # What is being heard now was handed to the sound card latency_ms ago, and
+        # never earlier than where Play started, so the bar does not jump backwards.
+        heard = max(0.0, ms - self.latency_ms) / 1000
+        time = max(self._play_from, F(heard * self.score.bpm / 60).limit_denominator(64))
         if time >= self.score.length:
             self._stop()
             return
