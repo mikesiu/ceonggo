@@ -471,8 +471,32 @@ class RollCanvas(QWidget):
         elif event.key() in (Qt.Key_Up, Qt.Key_Down) and self.selected:
             step = (12 if event.modifiers() & Qt.ShiftModifier else 1) * (1 if event.key() == Qt.Key_Up else -1)
             self._shift_selection(step)
+        elif event.key() in (Qt.Key_Left, Qt.Key_Right, Qt.Key_Home):
+            self.move_playhead(None if event.key() == Qt.Key_Home
+                               else (-1 if event.key() == Qt.Key_Left else 1))
+            event.accept()
         else:
             super().keyPressEvent(event)
+
+    def move_playhead(self, bars: int | None) -> None:
+        """Home (``None``) and ←/→ step the play line by whole bars.
+
+        This lives on the canvas rather than the dialog because the piano roll sits
+        in a QScrollArea, which claims the arrow keys to scroll itself. A handler
+        further up never saw them: the view slid sideways and the play line stayed
+        where it was. Accepting the key here stops that.
+        """
+        if bars is None:
+            bar = 0
+        else:
+            here = self.score.bar_of(self.playhead)
+            # Going back from mid-bar lands on this barline first, as a transport does.
+            back_to_barline = bars < 0 and self.playhead > self.score.bar_start(here)
+            bar = max(0, min(here if back_to_barline else here + bars, self.score.bars - 1))
+        self.playhead = self.score.bar_start(bar)
+        self.ensure_visible(self.playhead)
+        self.update()
+        self.seek.emit(self.playhead)
 
     # --- edits -----------------------------------------------------------
     def _after_edit(self) -> None:
@@ -606,6 +630,7 @@ class ScoreEditor(QDialog):
         #: heard, so the playhead is drawn this far behind it. See PlayerBar.
         self.latency_ms = max(0, int(latency_ms))
         self._play_from = F(0)
+        self._focused = False
         self.dirty = False
         self._render: PreviewRender | None = None
         self._preview_hash = ""
@@ -1035,11 +1060,24 @@ class ScoreEditor(QDialog):
         self.player.setPosition(int(seconds * 1000))
         self.player.play()
 
+    def showEvent(self, event) -> None:
+        """Give the piano roll the keyboard the first time the window appears.
+
+        setFocus() in __init__ is dropped on the floor - the widget is not visible
+        yet - and without focus the scroll area receives ←/→ and scrolls the view
+        instead of moving the play line.
+        """
+        super().showEvent(event)
+        if self.canvas is not None and not self._focused:
+            self._focused = True
+            self.canvas.setFocus()
+
     def keyPressEvent(self, event) -> None:
         """←/→/Home work the play line like a transport.
 
         Handled here rather than as QShortcuts so the ABC text view keeps its own
         arrow keys: a dialog only sees what the focused widget did not consume.
+        This is the fallback; the canvas handles them itself when it has focus.
         """
         moves = {Qt.Key_Home: None, Qt.Key_Left: -1, Qt.Key_Right: 1}
         if event.key() in moves and not self.advanced.isChecked():
@@ -1049,27 +1087,10 @@ class ScoreEditor(QDialog):
         super().keyPressEvent(event)
 
     def _move_playhead(self, bars: int | None) -> None:
-        """Home (``None``) and ←/→ move the play line by whole bars.
-
-        Until now the only way was clicking the bar-number ruler, which is a thin
-        target and was not mentioned in the hint line, so the play line looked
-        stuck where it was.
-        """
-        if not self.canvas or not self.score:
-            return
-        if bars is None:
-            bar = 0
-        else:
-            here = self.score.bar_of(self.canvas.playhead)
-            # Going back from mid-bar lands on this barline first, as a transport does.
-            back_to_barline = bars < 0 and self.canvas.playhead > self.score.bar_start(here)
-            bar = here if back_to_barline else here + bars
-            bar = max(0, min(bar, self.score.bars - 1))
-        time = self.score.bar_start(bar)
-        self.canvas.playhead = time
-        self.canvas.ensure_visible(time)
-        self.canvas.update()
-        self._seek(time)
+        """Fallback for when focus is somewhere that ignores the arrows; the canvas
+        handles them itself when it has focus, which is the usual case."""
+        if self.canvas and self.score:
+            self.canvas.move_playhead(bars)
 
     def _stop(self) -> None:
         if self.player.playbackState() != QMediaPlayer.StoppedState:
