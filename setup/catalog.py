@@ -64,8 +64,19 @@ class Item:
         return []
 
     @property
+    def variant(self) -> str:
+        """Which card this item is for: "" is any, else "nvidia" or "amd".
+
+        Only the two library environments differ - one carries CUDA wheels, the
+        other ROCm. Models, Python runtimes, uv and FFmpeg are the same either
+        way, so they carry no variant and are installed for everybody.
+        """
+        return self.data.get("variant", "")
+
+    @property
     def label(self) -> str:
         kind, _, name = self.id.partition(":")
+        name = name.removesuffix("-rocm")
         return {"model": name, "python": f"Python ({name})", "env": f"Libraries ({name})",
                 "tool": name}.get(kind, self.id)
 
@@ -82,15 +93,23 @@ class Catalog:
     def component(self, cid: str) -> Component:
         return next(c for c in self.components if c.id == cid)
 
-    def items_for(self, components) -> list[Item]:
+    def items_for(self, components, vendor: str = "nvidia") -> list[Item]:
+        """Everything the chosen components need on this kind of card.
+
+        ``vendor`` comes straight from ``gpu.detect().vendor``. A machine with no
+        card at all is treated as NVIDIA, which is what every release before AMD
+        support did, so nothing changes for an install that already exists.
+        """
         wanted = set(components) | {c.id for c in self.components if c.required}
-        return [i for i in self.items if i.component in wanted]
+        return [i for i in self.items
+                if i.component in wanted and i.variant in ("", vendor)]
 
-    def download_bytes(self, components) -> int:
-        return sum(i.size for i in self.items_for(components))
+    def download_bytes(self, components, vendor: str = "nvidia") -> int:
+        return sum(i.size for i in self.items_for(components, vendor))
 
-    def component_bytes(self, cid: str) -> int:
-        return sum(i.size for i in self.items if i.component == cid)
+    def component_bytes(self, cid: str, vendor: str = "nvidia") -> int:
+        return sum(i.size for i in self.items
+                   if i.component == cid and i.variant in ("", vendor))
 
 
 def human_bytes(n: float) -> str:

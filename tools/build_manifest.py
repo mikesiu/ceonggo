@@ -23,12 +23,14 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import shutil
 import subprocess
 import sys
 import tempfile
 import tomllib
 import urllib.request
+from urllib.parse import urljoin
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -63,6 +65,21 @@ ENVS = {
         "index": "https://download.pytorch.org/whl/cu128",   # cu128 also covers RTX 50-series (sm_120)
     },
 }
+
+#: AMD publishes Windows ROCm wheels per GPU family; gfx120X-all covers RDNA4.
+ROCM_INDEX = "https://rocm.nightlies.amd.com/v2/gfx120X-all"
+
+#: One nightly build per environment: the newest date where that Python's torch,
+#: the two ROCm SDK wheels and the rocm sdist all exist together. They are dated
+#: nightlies and AMD prunes old ones, so these URLs have a shelf life - re-run
+#: `build_manifest.py --rocm` to move them on, and expect the hashes to change.
+ROCM_BUILDS = {"yue2": "20260511", "sheetsage": "20260513"}
+#: What each environment takes from the ROCm index instead of the CUDA one.
+ROCM_TORCH = {"yue2": ["torch"], "sheetsage": ["torch", "torchaudio"]}
+#: Pulled in by torch itself: the runtime libraries, and a wrapper that is sdist
+#: only, so Setup builds it the same way it builds pretty_midi.
+ROCM_SUPPORT = ["rocm-sdk-core", "rocm-sdk-libraries-gfx120x-all"]
+ROCM_SDIST = "rocm"
 
 MODELS = {
     "YuE2-3B": "song",
@@ -186,6 +203,69 @@ def pick_wheel(wheels: list[dict], tag: str) -> dict | None:
     return ranked[0] if ranked and score(ranked[0]["url"]) else None
 
 
+def rocm_listing(package: str) -> list[str]:
+    """Download URLs the ROCm index publishes for one package.
+
+    The hrefs are relative and point a level up ("../torch-2.10.0%2B...whl"), so
+    they are resolved against the page rather than pasted onto it, and kept
+    encoded - the "+" in a local version arrives as %2B and must stay that way.
+    """
+    page = f"{ROCM_INDEX}/{package}/"
+    with _open(page) as r:
+        html = r.read().decode("utf-8", errors="replace")
+    return [urljoin(page, h.split("#")[0]) for h in re.findall(r'href="([^"]+)"', html)
+            if h.split("#")[0].endswith((".whl", ".tar.gz"))]
+
+
+def rocm_pick(package: str, build: str, suffix: str) -> str:
+    """The one file for this package, nightly build and Python/extension."""
+    matches = [u for u in rocm_listing(package)
+               if f"a{build}" in u and u.endswith(suffix)]
+    if len(matches) != 1:
+        sys.exit(f"ROCm index: expected one {package} {suffix} for build {build}, "
+                 f"got {[m.rsplit('/', 1)[-1] for m in matches]}")
+    return matches[0]
+
+
+def rocm_env(name: str, cuda: dict, build: str) -> dict:
+    """The AMD twin of a CUDA environment item.
+
+    Everything except the torch stack is identical - numpy, transformers and the
+    rest are the same wheels on either card - so they are reused rather than
+    resolved again, and only torch, torchaudio and the ROCm runtime are swapped.
+    """
+    tag = "cp" + "".join(ENVS[name]["python"].split(".")[:2])
+    swapped = set(ROCM_TORCH[name]) | {p.replace("-", "_") for p in ROCM_SUPPORT} | {ROCM_SDIST}
+    wheels = [w for w in cuda["wheels"] if w["name"].replace("-", "_").lower()
+              not in {s.replace("-", "_").lower() for s in swapped}]
+    for package in ROCM_TORCH[name] + ROCM_SUPPORT:
+        url = rocm_pick(package, build, f"-{tag}-{tag}-win_amd64.whl"
+                        if package in ROCM_TORCH[name] else "-py3-none-win_amd64.whl")
+        size, sha = hash_remote(url)
+        wheels.append({"name": package, "url": url, "size": size, "sha256": sha})
+    url = rocm_pick(ROCM_SDIST, build, ".tar.gz")
+    size, sha = hash_remote(url)
+    wheels.append({"name": ROCM_SDIST, "url": url, "size": size, "sha256": sha, "build": True})
+    return {"id": f"{cuda['id']}-rocm", "kind": "wheels", "component": cuda["component"],
+            "variant": "amd", "python": cuda["python"], "rocm_build": build,
+            "size": sum(w["size"] for w in wheels), "wheels": wheels}
+
+
+def add_rocm(catalog: dict) -> dict:
+    """Stamp the CUDA environments as NVIDIA-only and add their AMD twins."""
+    items = [i for i in catalog["items"] if not i["id"].endswith("-rocm")]
+    out = []
+    for item in items:
+        out.append(item)
+        if item["kind"] == "wheels":
+            item["variant"] = "nvidia"
+            name = item["id"].partition(":")[2]
+            print(f"ROCm environment for {name} (build {ROCM_BUILDS[name]})")
+            out.append(rocm_env(name, item, ROCM_BUILDS[name]))
+    catalog["items"] = out
+    return catalog
+
+
 def model(repo: str, component: str) -> dict:
     info = get_json(f"https://huggingface.co/api/models/m-a-p/{repo}")
     sha = info["sha"]
@@ -207,6 +287,16 @@ def model(repo: str, component: str) -> dict:
 
 
 def main() -> None:
+    if "--rocm" in sys.argv:
+        # Only the AMD environments, merged into the catalogue that is already
+        # there. A full run would re-pin every model to whatever HEAD is today,
+        # which is a lot of churn for a change that touches two items.
+        catalog = json.loads(CATALOG.read_text(encoding="utf-8"))
+        catalog = add_rocm(catalog)
+        CATALOG.write_text(json.dumps(catalog, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
+        print(f"Wrote {CATALOG} - {len(catalog['items'])} items")
+        return
+
     pbs = "https://github.com/astral-sh/python-build-standalone/releases/download"
     items = []
     print("Models")

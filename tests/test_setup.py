@@ -30,6 +30,45 @@ def test_catalog_components_and_order():
     assert archives[0] == "tool:uv"
 
 
+def test_catalogue_offers_one_environment_per_card():
+    catalog = Catalog(ROOT / "setup" / "catalog.json")
+    for vendor, wanted in (("nvidia", {"env:yue2", "env:sheetsage"}),
+                           ("amd", {"env:yue2-rocm", "env:sheetsage-rocm"})):
+        envs = {i.id for i in catalog.items_for(["song", "cover"], vendor) if i.kind == "wheels"}
+        assert envs == wanted, vendor
+    # everything that is not a library environment is shared, so it carries no
+    # variant and must be offered to both
+    shared = {i.id for i in catalog.items if not i.variant}
+    assert {"model:YuE2-3B", "python:yue2", "tool:ffmpeg"} <= shared
+    assert not any(i.variant for i in catalog.items if i.kind != "wheels")
+
+
+def test_repair_on_an_amd_card_leaves_the_cuda_environment_alone(tmp_path):
+    """Setup used to drop CUDA wheels over a working ROCm runtime, which is how
+    an AMD install broke itself the moment anyone pressed Repair."""
+    catalog = Catalog(ROOT / "setup" / "catalog.json")
+    amd = Installer(catalog, tmp_path, ["song", "cover"], vendor="amd")
+    ids = {i.id for i in amd.items}
+    assert "env:yue2" not in ids and "env:sheetsage" not in ids
+    assert {"env:yue2-rocm", "env:sheetsage-rocm"} <= ids
+    assert {i.id for i in amd.plan()} == ids          # nothing installed yet, so all of it
+    nvidia = Installer(catalog, tmp_path, ["song", "cover"], vendor="nvidia")
+    assert not any(i.id.endswith("-rocm") for i in nvidia.items)
+
+
+def test_a_component_is_complete_on_either_card(tmp_path):
+    """Completeness is judged per card. Counting both variants would leave every
+    component for ever incomplete, and the app would say it was not installed."""
+    catalog = Catalog(ROOT / "setup" / "catalog.json")
+    for vendor in ("nvidia", "amd"):
+        root = tmp_path / vendor
+        root.mkdir()
+        installer = Installer(catalog, root, ["song", "cover"], vendor=vendor)
+        installer.write_state()
+        state = json.loads((root / "setup_state.json").read_text())
+        assert "song" in state["components"] and "cover" in state["components"], vendor
+
+
 def test_every_download_is_pinned():
     catalog = Catalog(ROOT / "setup" / "catalog.json")
     for item in catalog.items:

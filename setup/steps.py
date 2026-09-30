@@ -84,11 +84,15 @@ class Installer:
                  on_progress: Callable[[Overall], None] | None = None,
                  on_log: Callable[[str], None] | None = None,
                  should_stop: Callable[[], bool] | None = None,
-                 hf_token: str = "", clean_wheels: bool = True):
+                 hf_token: str = "", clean_wheels: bool = True, vendor: str = "nvidia"):
         self.catalog = catalog
         self.root = Path(root)
         self.components = components
-        self.items = catalog.items_for(components)
+        #: "nvidia" or "amd" - decides which library environment is installed, and
+        #: just as importantly which one is left alone. Repairing on a Radeon must
+        #: not drop CUDA wheels over a working ROCm runtime.
+        self.vendor = vendor
+        self.items = catalog.items_for(components, vendor)
         self.on_step = on_step or (lambda s: None)
         self.on_progress = on_progress or (lambda p: None)
         self.on_log = on_log or (lambda s: None)
@@ -261,11 +265,16 @@ class Installer:
             self._run(base + ["--no-build-isolation", *sources], t("Building libraries failed"))
 
     def verify(self) -> None:
+        # Matched on the environment name, not the item id: the AMD items are
+        # env:yue2-rocm and env:sheetsage-rocm, and a self-test that silently
+        # skipped itself on a Radeon would be worse than no self-test.
+        installed = {i.id.partition(":")[2].removesuffix("-rocm") for i in self.items
+                     if i.kind == "wheels"}
         checks = []
-        if any(i.id == "env:yue2" for i in self.items):
+        if "yue2" in installed:
             checks.append((self.path("runtime/yue2/python.exe"),
                            "import torch, yue2, soundfile; print('yue2', torch.__version__, torch.cuda.is_available())"))
-        if any(i.id == "env:sheetsage" for i in self.items):
+        if "sheetsage" in installed:
             checks.append((self.path("runtime/sheetsage/python.exe"),
                            "import torch, transformers, pretty_midi, soundfile; "
                            "print('sheetsage', torch.__version__, torch.cuda.is_available())"))
@@ -284,8 +293,12 @@ class Installer:
         for item in self.items:
             items[item.id] = {"component": item.component, "fingerprint": self.fingerprint(item),
                               "revision": item.data.get("revision")}
-        components = sorted({i.component for i in self.catalog.items if i.id in items and
-                             all(j.id in items for j in self.catalog.items if j.component == i.component)})
+        # Completeness is judged only against the items this card needs. Counting
+        # both variants would leave every component for ever incomplete: an AMD
+        # install can never hold env:yue2, and a CUDA one never env:yue2-rocm.
+        mine = [i for i in self.catalog.items if i.variant in ("", self.vendor)]
+        components = sorted({i.component for i in mine if i.id in items and
+                             all(j.id in items for j in mine if j.component == i.component)})
         state.update({"schema": 1, "components": components, "items": items,
                       "updated": datetime.now().isoformat(timespec="seconds")})
         state_file.write_text(json.dumps(state, indent=1), encoding="utf-8")

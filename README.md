@@ -146,7 +146,7 @@ workers/                      the scripts the downloaded Pythons run
 | `pretty_midi` is source-only | built offline during Setup with the locked setuptools |
 | SheetSage2's CUDA 12.6 build has no RTX 50-series (`sm_120`) code | both runtimes use CUDA 12.8 builds, which still include Ampere and Ada |
 
-### AMD cards (ROCm) — working, but not yet installable
+### AMD cards (ROCm)
 
 Verified end to end on a **Radeon AI PRO R9700** (RDNA4, `gfx1201`, 32 GB) under Windows:
 a 59.7 s song in 151 s, and a 3:26 recording transcribed in 49 s. Both runtimes run on
@@ -165,10 +165,26 @@ What the code does differently on AMD:
 | Retries | ROCm names the failing kernel rather than its family, so `RETRY_HINTS` carries `mha_varlen`, `rocm`, `miopen` and `no available kernel` |
 | Playback | over Remote Desktop audio is redirected to the client and buffers ~250 ms, so the score editor draws its playhead that far behind the player's clock |
 
-**Not done:** `setup/catalog.json` and `tools/build_manifest.py` still pin only `+cu128`
-wheels, so Setup cannot build an AMD install — `runtime/yue2` and `runtime/sheetsage`
-have to be populated by hand. MIOpen's kernel cache also costs about 3x on the first
-decode until it warms.
+Setup installs the right one by itself. The catalogue carries both library environments —
+`env:yue2` / `env:sheetsage` marked `variant: nvidia`, and `env:yue2-rocm` /
+`env:sheetsage-rocm` marked `amd` — and `Catalog.items_for` picks by what `gpu.detect()`
+found. Everything else (models, the Python runtimes, uv, FFmpeg) is the same on either
+card and carries no variant. A machine with no readable card is treated as NVIDIA, so
+existing installs are unaffected. Crucially, **Repair on a Radeon no longer drops CUDA
+wheels over a working ROCm runtime** — the CUDA items are simply not in its plan.
+
+```bash
+python tools/build_manifest.py --rocm    # re-pin just the two AMD environments
+```
+
+**The catch:** AMD publishes these as dated nightlies and prunes old ones, so the pinned
+URLs have a shelf life — `ROCM_BUILDS` in `build_manifest.py` names one build per
+environment (the newest where that Python's torch, both ROCm SDK wheels and the `rocm`
+sdist all exist together). When they 404, re-run the command above. That is the one place
+this project's "pin everything, resolve nothing on the user's machine" rule is living on
+borrowed time.
+
+MIOpen's kernel cache also costs about 3x on the first decode until it warms.
 
 ## Developing
 
