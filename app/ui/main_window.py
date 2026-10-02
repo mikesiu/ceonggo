@@ -335,5 +335,6 @@ class MainWindow(QMainWindow):
                 self.engine.process.proc.kill()
                 self.engine.process.proc.waitForFinished(5000)
         self.create_tab.remember()
+        self.cover_tab.remember()
         self.cfg.save()
         event.accept()
