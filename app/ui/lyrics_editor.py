@@ -84,7 +84,11 @@ class LyricsEditor(QWidget):
         """Put in words edited elsewhere (the score editor) as one step Ctrl+Z can take back.
 
         ``setPlainText`` would clear the undo history and lose the old words for good.
+        The same words again are a no-op, so a tab that both opened the editor and
+        receives its score is not given an empty undo step.
         """
+        if text == self.text.toPlainText():
+            return
         cursor = self.text.textCursor()
         cursor.select(QTextCursor.Document)
         cursor.insertText(text)

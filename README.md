@@ -82,8 +82,9 @@ Opens from a song card's **Score** button, from **See / edit the score** on the 
   (amber for a looser fit), following the 0243 rule lyricists use. Click a word to select its notes
   (↑/↓ then fixes it), choose which reading it has, swap in a common word that sounds the same, or
   edit its line. The status line counts tone clashes, words without a note of their own, and notes
-  without a new word. Edited words travel with the score to Create, Cover or **Sing it now**. YuE2
-  places the words itself, so the lane is an estimate: it pairs syllables with notes in order, kept
+  without a new word. Edited words travel with the score to Create, Cover or **Sing it now**, and
+  the lyrics box of the tab the editor was opened from shows them too (Ctrl+Z there brings the old
+  words back); closing the editor changes nothing. YuE2 places the words itself, so the lane is an estimate: it pairs syllables with notes in order, kept
   in step at the spaces and line ends of the lyrics and the rests of the melody.
 - **Use it** — **Make a song with this score** (Create) or **Make a cover with this score**
   (Cover), plus **Open .abc…** / **Save as .abc…** and an **ABC text** view for hand editing.

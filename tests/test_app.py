@@ -197,3 +197,46 @@ def test_song_settings_come_from_the_run(tmp_path):
     assert settings.score == "chord-free" and settings.source_path == "D:/music/orig.mp3"
     (folder / Song.INPUT_SCORE).write_text("full score with chords", encoding="utf-8")
     assert Song.load(folder).settings().score == "full score with chords"      # preferred over job.json
+
+
+def test_words_edited_in_the_score_editor_reach_the_tab_that_opened_it(monkeypatch):
+    from types import SimpleNamespace
+
+    from app.ui import main_window, score_editor
+
+    class Box:                                    # a tab's lyrics box
+        def __init__(self, text):
+            self.text = text
+
+        def replace_all(self, text):
+            self.text = text
+
+    def leave_editor(action, edited):
+        """Open the editor from a tab, leave it through ``action``; return what each party got."""
+        class Editor:                             # stands in for the dialog: no Qt needed
+            def __init__(self, text, **_):
+                self.chosen = SimpleNamespace(connect=lambda slot: setattr(self, "slot", slot))
+
+            def edited_lyrics(self):
+                return edited
+
+            def exec(self):
+                self.slot(action, "ABC")
+
+        monkeypatch.setattr(score_editor, "ScoreEditor", Editor)
+        target = SimpleNamespace(lyrics=Box("target words"), set_score=lambda text, origin: None)
+        window = SimpleNamespace(cfg=SimpleNamespace(get=lambda key, default=None: default),
+                                 player=SimpleNamespace(player=SimpleNamespace(pause=None), latency_ms=0),
+                                 create_tab=target, cover_tab=target, show_tab=lambda tab: None)
+        window.use_score = lambda *args, **kwargs: main_window.MainWindow.use_score(window, *args, **kwargs)
+        opener, sung = Box("old words"), []
+        main_window.MainWindow.edit_score(window, "ABC", title="t", origin="o", lyrics="old words",
+                                          style="Cantonese", on_sing=lambda abc, words: sung.append(words),
+                                          on_lyrics=opener.replace_all)
+        return opener.text, target.lyrics.text, sung
+
+    assert leave_editor("sing", "new words") == ("new words", "target words", ["new words"])
+    assert leave_editor("create", "new words") == ("new words", "new words", [])
+    assert leave_editor("cover", "new words") == ("new words", "new words", [])
+    assert leave_editor("sing", None) == ("old words", "target words", [None])     # untouched words
+    assert leave_editor("create", None) == ("old words", "target words", [])

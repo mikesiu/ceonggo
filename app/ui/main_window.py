@@ -111,12 +111,16 @@ class MainWindow(QMainWindow):
         return card
 
     def edit_score(self, text: str, *, title: str, origin: str, actions=("create", "cover"),
-                   primary: str = "create", on_sing=None, lyrics: str = "", style: str = "") -> None:
+                   primary: str = "create", on_sing=None, lyrics: str = "", style: str = "",
+                   on_lyrics=None) -> None:
         """Open the score editor; whatever the user chooses is routed from here.
 
         ``lyrics`` and ``style`` give a Cantonese song its Words lane. Words edited
         there travel with the score: ``on_sing(abc, lyrics)`` and the target tab
-        receive them, or None when they were left alone.
+        receive them, or None when they were left alone. ``on_lyrics(lyrics)`` is
+        the opening tab's hook: when the editor is left through Sing it now or a
+        Use button with edited words, it gets them first, so its lyrics box shows
+        what is about to be sung. Closing the editor changes nothing.
         """
         from app.ui.score_editor import ScoreEditor
 
@@ -129,6 +133,8 @@ class MainWindow(QMainWindow):
 
         def chosen(action: str, abc: str) -> None:
             words = dialog.edited_lyrics()
+            if words is not None and on_lyrics:
+                on_lyrics(words)
             if action == "sing" and on_sing:
                 on_sing(abc, words)
             else:
