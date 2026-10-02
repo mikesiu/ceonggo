@@ -1,7 +1,7 @@
 # -*- mode: python ; coding: utf-8 -*-
-"""Gokuk and Gokuk Setup, built into one portable folder.
+"""Ceonggo and Ceonggo Setup, built into one portable folder.
 
-    python tools/build_release.py        (or: pyinstaller --noconfirm Gokuk.spec)
+    python tools/build_release.py        (or: pyinstaller --noconfirm Ceonggo.spec)
 
 Two programs share one _internal folder, so PySide6 is shipped once. Neither
 contains torch: the engines are downloaded by Setup into runtime/.
@@ -60,16 +60,16 @@ def program(a, name, icon):
     )
 
 
-app = analysis("Gokuk.py")
-setup = analysis("GokukSetup.py", extra_excludes=["PySide6.QtMultimedia"])
+app = analysis("Ceonggo.py")
+setup = analysis("CeonggoSetup.py", extra_excludes=["PySide6.QtMultimedia"])
 
-app_exe = program(app, "Gokuk", "assets/icons/Gokuk.ico")
-setup_exe = program(setup, "Gokuk Setup", "assets/icons/GokukSetup.ico")
+app_exe = program(app, "Ceonggo", "assets/icons/Ceonggo.ico")
+setup_exe = program(setup, "Ceonggo Setup", "assets/icons/CeonggoSetup.ico")
 
 coll = COLLECT(
     app_exe, app.binaries, app.datas,
     setup_exe, setup.binaries, setup.datas,
     strip=False,
     upx=False,
-    name="Gokuk",
+    name="Ceonggo",
 )

@@ -9,8 +9,8 @@ works from a file where both halves are sentences. Catalogues live in
 lang/<code>.json as a flat {english: translated} map.
 
 Ported from EasyAI. One change: the chosen language is remembered inside the
-portable folder (language.json beside the exe), never in %APPDATA%. Both Gokuk
-and Gokuk Setup read and write it, so choosing once covers both.
+portable folder (language.json beside the exe), never in %APPDATA%. Both Ceonggo
+and Ceonggo Setup read and write it, so choosing once covers both.
 """
 from __future__ import annotations
 

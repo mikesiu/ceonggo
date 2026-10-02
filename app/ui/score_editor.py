@@ -471,8 +471,32 @@ class RollCanvas(QWidget):
         elif event.key() in (Qt.Key_Up, Qt.Key_Down) and self.selected:
             step = (12 if event.modifiers() & Qt.ShiftModifier else 1) * (1 if event.key() == Qt.Key_Up else -1)
             self._shift_selection(step)
+        elif event.key() in (Qt.Key_Left, Qt.Key_Right, Qt.Key_Home):
+            self.move_playhead(None if event.key() == Qt.Key_Home
+                               else (-1 if event.key() == Qt.Key_Left else 1))
+            event.accept()
         else:
             super().keyPressEvent(event)
+
+    def move_playhead(self, bars: int | None) -> None:
+        """Home (``None``) and ←/→ step the play line by whole bars.
+
+        This lives on the canvas rather than the dialog because the piano roll sits
+        in a QScrollArea, which claims the arrow keys to scroll itself. A handler
+        further up never saw them: the view slid sideways and the play line stayed
+        where it was. Accepting the key here stops that.
+        """
+        if bars is None:
+            bar = 0
+        else:
+            here = self.score.bar_of(self.playhead)
+            # Going back from mid-bar lands on this barline first, as a transport does.
+            back_to_barline = bars < 0 and self.playhead > self.score.bar_start(here)
+            bar = max(0, min(here if back_to_barline else here + bars, self.score.bars - 1))
+        self.playhead = self.score.bar_start(bar)
+        self.ensure_visible(self.playhead)
+        self.update()
+        self.seek.emit(self.playhead)
 
     # --- edits -----------------------------------------------------------
     def _after_edit(self) -> None:
@@ -593,13 +617,20 @@ class ScoreEditor(QDialog):
               "cover": N("Make a cover with this score")}
 
     def __init__(self, text: str, *, title: str, actions: tuple[str, ...] = ("create", "cover"),
-                 primary: str = "create", pause_player=None, parent=None):
+                 primary: str = "create", pause_player=None, audio_device: str = "",
+                 latency_ms: int = 0, parent=None):
         super().__init__(parent)
         self.setWindowTitle(title)
         self.resize(1360, 860)
         self.setMinimumSize(1000, 640)
         self.original_text = text
         self.pause_player = pause_player
+        self.audio_device = audio_device
+        #: position() reports what the sound card has been given, not what has been
+        #: heard, so the playhead is drawn this far behind it. See PlayerBar.
+        self.latency_ms = max(0, int(latency_ms))
+        self._play_from = F(0)
+        self._focused = False
         self.dirty = False
         self._render: PreviewRender | None = None
         self._preview_hash = ""
@@ -741,7 +772,8 @@ class ScoreEditor(QDialog):
 
         self.hint = QLabel(t("Click to add a note · drag to move · drag its right edge to change length · "
                              "Delete removes · ↑/↓ change pitch · Shift-drag selects several · "
-                             "click the chord lane to add a chord · right-click bars and parts for more"))
+                             "click the chord lane to add a chord · click the bar numbers or press "
+                             "←/→/Home to move the play line · right-click bars and parts for more"))
         self.hint.setObjectName("Hint")
         self.hint.setWordWrap(True)
         layout.addWidget(self.hint)
@@ -768,6 +800,15 @@ class ScoreEditor(QDialog):
 
         self.player = QMediaPlayer(self)
         self.audio = QAudioOutput(self)
+        if self.audio_device:
+            # The preview has its own player, so the device chosen in Settings has
+            # to be applied here too or it would quietly use the system default.
+            from PySide6.QtMultimedia import QMediaDevices
+
+            for device in QMediaDevices.audioOutputs():
+                if device.description() == self.audio_device:
+                    self.audio.setDevice(device)
+                    break
         self.player.setAudioOutput(self.audio)
         self.player.positionChanged.connect(self._on_position)
         self.player.playbackStateChanged.connect(self._on_play_state)
@@ -947,7 +988,7 @@ class ScoreEditor(QDialog):
             text = Path(path).read_text(encoding="utf-8-sig")
             new = Score.from_abc(text)
         except (OSError, UnicodeDecodeError, abc_dialect.AbcError, UnsupportedScore) as error:
-            QMessageBox.warning(self, t("Open a score"), t("This file is not a score Gokuk can use: {why}", why=error))
+            QMessageBox.warning(self, t("Open a score"), t("This file is not a score Ceonggo can use: {why}", why=error))
             return
         if self.history is None:
             QMessageBox.information(self, t("Open a score"), t("Close this window and open the file from the tab."))
@@ -970,7 +1011,12 @@ class ScoreEditor(QDialog):
             return
         if not path.lower().endswith(".abc"):
             path += ".abc"
-        Path(path).write_text(text, encoding="utf-8")
+        try:
+            Path(path).write_text(text, encoding="utf-8")
+        except OSError as error:
+            QMessageBox.warning(self, t("Save score"),
+                                t("The score could not be saved: {why}", why=error))
+            return
         self.dirty = False
         self.status.setText(t("Saved {path}", path=path))
 
@@ -1009,22 +1055,62 @@ class ScoreEditor(QDialog):
     def _play_from_playhead(self) -> None:
         if self.pause_player:
             self.pause_player()
-        seconds = float(self.canvas.playhead) * 60 / self.score.bpm if self.canvas else 0
+        self._play_from = self.canvas.playhead if self.canvas else F(0)
+        seconds = float(self._play_from) * 60 / self.score.bpm
         self.player.setPosition(int(seconds * 1000))
         self.player.play()
+
+    def showEvent(self, event) -> None:
+        """Give the piano roll the keyboard the first time the window appears.
+
+        setFocus() in __init__ is dropped on the floor - the widget is not visible
+        yet - and without focus the scroll area receives ←/→ and scrolls the view
+        instead of moving the play line.
+        """
+        super().showEvent(event)
+        if self.canvas is not None and not self._focused:
+            self._focused = True
+            self.canvas.setFocus()
+
+    def keyPressEvent(self, event) -> None:
+        """←/→/Home work the play line like a transport.
+
+        Handled here rather than as QShortcuts so the ABC text view keeps its own
+        arrow keys: a dialog only sees what the focused widget did not consume.
+        This is the fallback; the canvas handles them itself when it has focus.
+        """
+        moves = {Qt.Key_Home: None, Qt.Key_Left: -1, Qt.Key_Right: 1}
+        if event.key() in moves and not self.advanced.isChecked():
+            self._move_playhead(moves[event.key()])
+            event.accept()
+            return
+        super().keyPressEvent(event)
+
+    def _move_playhead(self, bars: int | None) -> None:
+        """Fallback for when focus is somewhere that ignores the arrows; the canvas
+        handles them itself when it has focus, which is the usual case."""
+        if self.canvas and self.score:
+            self.canvas.move_playhead(bars)
 
     def _stop(self) -> None:
         if self.player.playbackState() != QMediaPlayer.StoppedState:
             self.player.pause()
 
     def _seek(self, time: Fraction) -> None:
+        # Dragging the playhead moves where playback counts from, so the latency
+        # clamp in _on_position follows it. Without this a seek backwards was
+        # pulled straight back to wherever Play had originally started.
+        self._play_from = time
         if self.player.playbackState() == QMediaPlayer.PlayingState and self.score:
             self.player.setPosition(int(float(time) * 60 / self.score.bpm * 1000))
 
     def _on_position(self, ms: int) -> None:
         if not self.canvas or not self.score or self.player.playbackState() != QMediaPlayer.PlayingState:
             return
-        time = F(ms / 1000 * self.score.bpm / 60).limit_denominator(64)
+        # What is being heard now was handed to the sound card latency_ms ago, and
+        # never earlier than where Play started, so the bar does not jump backwards.
+        heard = max(0.0, ms - self.latency_ms) / 1000
+        time = max(self._play_from, F(heard * self.score.bpm / 60).limit_denominator(64))
         if time >= self.score.length:
             self._stop()
             return

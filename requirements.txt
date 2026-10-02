@@ -1,4 +1,4 @@
-# The two windows (Gokuk and Gokuk Setup). The engines are NOT listed here:
-# Gokuk Setup downloads them into runtime/ with their own pinned versions.
+# The two windows (Ceonggo and Ceonggo Setup). The engines are NOT listed here:
+# Ceonggo Setup downloads them into runtime/ with their own pinned versions.
 PySide6>=6.6
 requests>=2.31

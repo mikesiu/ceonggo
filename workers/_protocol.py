@@ -1,4 +1,4 @@
-"""The protocol between the Gokuk window and a worker process.
+"""The protocol between the Ceonggo window and a worker process.
 
 Stdlib only: this file is imported by workers running inside the downloaded
 Python runtimes, which have torch but not PySide6, and by the GUI, which has

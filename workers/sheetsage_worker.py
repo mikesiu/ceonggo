@@ -1,4 +1,4 @@
-"""Gokuk worker: transcribe one recording to a melody score with SheetSage2.
+"""Ceonggo worker: transcribe one recording to a melody score with SheetSage2.
 
 Runs inside ``runtime/sheetsage/python.exe`` - a separate runtime, because
 SheetSage2 pins torch, transformers and numpy versions that conflict with

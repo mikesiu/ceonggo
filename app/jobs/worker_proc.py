@@ -3,7 +3,7 @@
 The window never imports torch. Each song or transcription is one
 ``python.exe workers/<name>_worker.py <job>.json`` process, started with a
 clean, portable environment: every cache and temp folder points inside the
-Gokuk folder, user site-packages are ignored, and Python runs in UTF-8 mode
+Ceonggo folder, user site-packages are ignored, and Python runs in UTF-8 mode
 (YuE2 writes JSON with the default encoding, which is cp1252 on Windows and
 cannot hold Chinese lyrics).
 
@@ -29,7 +29,7 @@ import _protocol as proto  # noqa: E402  (stdlib-only module shared with the wor
 
 KILL_AFTER_MS = 20000
 
-#: The worker scripts carry WORKER_VERSION. Copying a new Gokuk over an old folder
+#: The worker scripts carry WORKER_VERSION. Copying a new Ceonggo over an old folder
 #: can leave old workers behind (it happened: new window, old worker, so the
 #: memory mode the window chose was silently ignored). Refuse to mix versions.
 EXPECTED_WORKER_VERSION = 2
@@ -89,6 +89,13 @@ class WorkerProcess(QObject):
         self.worker = worker
         self.job = job
         self.proc = QProcess(self)
+        # Owned by this object so it dies with it. A bare QTimer.singleShot would
+        # still fire after the Engine has deleteLater()'d us, and _kill_if_running
+        # would then touch an already-deleted QProcess - a RuntimeError nobody sees,
+        # because a windowed build has no console to print it to.
+        self._kill_timer = QTimer(self)
+        self._kill_timer.setSingleShot(True)
+        self._kill_timer.timeout.connect(self._kill_if_running)
         self._buffer = b""
         self._ended = False
         self._cancelling = False
@@ -109,7 +116,7 @@ class WorkerProcess(QObject):
             self._ended = True
             QTimer.singleShot(0, lambda: self.failed.emit({
                 "type": "error", "kind": "mixed_versions",
-                "message": f"{script} is version {found}, this Gokuk needs version {EXPECTED_WORKER_VERSION}"}))
+                "message": f"{script} is version {found}, this Ceonggo needs version {EXPECTED_WORKER_VERSION}"}))
             return
         self.job_file.write_text(json.dumps(self.job, ensure_ascii=False, indent=1), encoding="utf-8")
         extra = [paths.ffmpeg_bin()] if self.worker == "sheetsage" else None
@@ -131,7 +138,7 @@ class WorkerProcess(QObject):
             proto.cancel_path(self.job_file).write_text("cancel")
         except OSError:
             pass
-        QTimer.singleShot(KILL_AFTER_MS, self._kill_if_running)
+        self._kill_timer.start(KILL_AFTER_MS)
 
     def _kill_if_running(self) -> None:
         if self.proc.state() != QProcess.NotRunning:
@@ -186,4 +193,4 @@ class WorkerProcess(QObject):
         if error == QProcess.FailedToStart and not self._ended:
             self._ended = True
             self.failed.emit({"type": "error", "kind": "missing_files",
-                              "message": "The engine could not start - run Gokuk Setup to repair it."})
+                              "message": "The engine could not start - run Ceonggo Setup to repair it."})

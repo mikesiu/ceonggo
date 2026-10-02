@@ -1,4 +1,4 @@
-"""Small widgets shared by Gokuk and Gokuk Setup (ported from EasyAI)."""
+"""Small widgets shared by Ceonggo and Ceonggo Setup (ported from EasyAI)."""
 from __future__ import annotations
 
 import subprocess

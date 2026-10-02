@@ -1,8 +1,8 @@
 """Inspect the limited two-voice ABC dialect used by YuE2 and SheetSage2.
 
-Vendored into Gokuk from multimodal-art-projection/YuE,
+Vendored into Ceonggo from multimodal-art-projection/YuE,
 skills/yue2-music/scripts/abc_tools.py (Apache License 2.0; see
-licences/LICENSE-yue2-skill-Apache-2.0.txt). Gokuk's changes: section comments
+licences/LICENSE-yue2-skill-Apache-2.0.txt). Ceonggo's changes: section comments
 ("% verse") are recorded as (bar index, name) in ``Score.sections``, and the
 command-line interface was removed.
 
@@ -86,7 +86,7 @@ class Score:
     bpm: int
     voices: dict[str, Voice]
     music_lines: dict[int, str]
-    sections: list = field(default_factory=list)   # Gokuk: [(bar index, name)]
+    sections: list = field(default_factory=list)   # Ceonggo: [(bar index, name)]
 
 
 def parse_bar(body: str, voice: Voice, unit: Fraction, context: str) -> None:

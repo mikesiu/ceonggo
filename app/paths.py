@@ -1,6 +1,6 @@
 """Where things live, whether running from source or from a built .exe.
 
-Gokuk is portable: every file it creates or downloads sits inside one folder,
+Ceonggo is portable: every file it creates or downloads sits inside one folder,
 so the whole thing can be copied to another drive and keep working. Nothing
 goes to %APPDATA%, the registry, or a user-wide cache.
 
@@ -37,11 +37,11 @@ def resource_dir() -> Path:
 
 
 def root() -> Path:
-    """The portable folder: everything Gokuk writes goes under here.
+    """The portable folder: everything Ceonggo writes goes under here.
 
-    ``GOKUK_ROOT`` overrides it, for testing Setup against a scratch folder.
+    ``CEONGGO_ROOT`` overrides it, for testing Setup against a scratch folder.
     """
-    override = os.environ.get("GOKUK_ROOT")
+    override = os.environ.get("CEONGGO_ROOT")
     if override:
         return Path(override).resolve()
     if frozen():
@@ -100,11 +100,11 @@ def settings_file() -> Path:
 def setup_exe() -> Path:
     """The Setup program sitting beside the app (or its script from source)."""
     if frozen():
-        return root() / "Gokuk Setup.exe"
-    return PROJECT_ROOT / "GokukSetup.py"
+        return root() / "Ceonggo Setup.exe"
+    return PROJECT_ROOT / "CeonggoSetup.py"
 
 
 def app_exe() -> Path:
     if frozen():
-        return root() / "Gokuk.exe"
-    return PROJECT_ROOT / "Gokuk.py"
+        return root() / "Ceonggo.exe"
+    return PROJECT_ROOT / "Ceonggo.py"

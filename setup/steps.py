@@ -1,4 +1,4 @@
-"""The install itself: everything Gokuk needs, into one portable folder.
+"""The install itself: everything Ceonggo needs, into one portable folder.
 
 Order matters and is deliberate:
 
@@ -11,7 +11,7 @@ Order matters and is deliberate:
    into the standalone Python. No virtual environments: a venv remembers
    absolute paths and breaks when the folder is moved.
 5. **Verify** each runtime can import its engine and see the graphics card.
-6. **Tidy** the wheel cache and write setup_state.json, which Gokuk reads to
+6. **Tidy** the wheel cache and write setup_state.json, which Ceonggo reads to
    decide whether it is installed.
 
 Every step is idempotent. A finished item leaves a marker holding the hash of
@@ -38,7 +38,12 @@ from app.i18n import t
 from setup.catalog import Catalog, Item, human_bytes
 from setup.download import Cancelled, DownloadError, Progress, download, free_space
 
-HEADROOM = 1.2          # unpacking and wheel installs need more than the download
+#: Disk to demand beyond the download size. A wheel is fetched and then installed
+#: as extracted files (uv copies, it does not link), so torch's 2.5 GB exists
+#: twice until the cache is cleared at the end. 1.2 was optimistic enough to let
+#: an install start on a drive that could not finish it; the ~25 GB the README
+#: asks for against ~16.5 GB of downloads is where 1.5 comes from.
+HEADROOM = 1.5
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
 
@@ -79,11 +84,15 @@ class Installer:
                  on_progress: Callable[[Overall], None] | None = None,
                  on_log: Callable[[str], None] | None = None,
                  should_stop: Callable[[], bool] | None = None,
-                 hf_token: str = "", clean_wheels: bool = True):
+                 hf_token: str = "", clean_wheels: bool = True, vendor: str = "nvidia"):
         self.catalog = catalog
         self.root = Path(root)
         self.components = components
-        self.items = catalog.items_for(components)
+        #: "nvidia" or "amd" - decides which library environment is installed, and
+        #: just as importantly which one is left alone. Repairing on a Radeon must
+        #: not drop CUDA wheels over a working ROCm runtime.
+        self.vendor = vendor
+        self.items = catalog.items_for(components, vendor)
         self.on_step = on_step or (lambda s: None)
         self.on_progress = on_progress or (lambda p: None)
         self.on_log = on_log or (lambda s: None)
@@ -235,7 +244,7 @@ class Installer:
             # A fresh interpreter has no libraries: its environment must be redone too.
             self.path(f"cache/state/env_{item.id.split(':')[1]}.done").unlink(missing_ok=True)
         # Standalone Pythons refuse package installs by default (PEP 668). This
-        # copy belongs to Gokuk alone, so that protection has nothing to protect.
+        # copy belongs to Ceonggo alone, so that protection has nothing to protect.
         (dest / "Lib" / "EXTERNALLY-MANAGED").unlink(missing_ok=True)
 
     def install_wheels(self, item: Item) -> None:
@@ -256,11 +265,16 @@ class Installer:
             self._run(base + ["--no-build-isolation", *sources], t("Building libraries failed"))
 
     def verify(self) -> None:
+        # Matched on the environment name, not the item id: the AMD items are
+        # env:yue2-rocm and env:sheetsage-rocm, and a self-test that silently
+        # skipped itself on a Radeon would be worse than no self-test.
+        installed = {i.id.partition(":")[2].removesuffix("-rocm") for i in self.items
+                     if i.kind == "wheels"}
         checks = []
-        if any(i.id == "env:yue2" for i in self.items):
+        if "yue2" in installed:
             checks.append((self.path("runtime/yue2/python.exe"),
                            "import torch, yue2, soundfile; print('yue2', torch.__version__, torch.cuda.is_available())"))
-        if any(i.id == "env:sheetsage" for i in self.items):
+        if "sheetsage" in installed:
             checks.append((self.path("runtime/sheetsage/python.exe"),
                            "import torch, transformers, pretty_midi, soundfile; "
                            "print('sheetsage', torch.__version__, torch.cuda.is_available())"))
@@ -279,8 +293,12 @@ class Installer:
         for item in self.items:
             items[item.id] = {"component": item.component, "fingerprint": self.fingerprint(item),
                               "revision": item.data.get("revision")}
-        components = sorted({i.component for i in self.catalog.items if i.id in items and
-                             all(j.id in items for j in self.catalog.items if j.component == i.component)})
+        # Completeness is judged only against the items this card needs. Counting
+        # both variants would leave every component for ever incomplete: an AMD
+        # install can never hold env:yue2, and a CUDA one never env:yue2-rocm.
+        mine = [i for i in self.catalog.items if i.variant in ("", self.vendor)]
+        components = sorted({i.component for i in mine if i.id in items and
+                             all(j.id in items for j in mine if j.component == i.component)})
         state.update({"schema": 1, "components": components, "items": items,
                       "updated": datetime.now().isoformat(timespec="seconds")})
         state_file.write_text(json.dumps(state, indent=1), encoding="utf-8")
@@ -332,6 +350,7 @@ def unpack(archive: Path, destination: Path, strip: str | None) -> None:
     """Unpack a .zip or .tar.gz, dropping a single top folder named ``strip``."""
     destination.mkdir(parents=True, exist_ok=True)
     prefix = f"{strip.strip('/')}/" if strip else ""
+    inside = destination.resolve()
 
     def target_for(name: str) -> Path | None:
         name = name.replace("\\", "/")
@@ -341,7 +360,12 @@ def unpack(archive: Path, destination: Path, strip: str | None) -> None:
             name = name[len(prefix):]
         if not name or name.startswith("/") or ".." in Path(name).parts:
             return None
-        return destination / name
+        out = destination / name
+        # The checks above miss a drive-absolute entry ("C:/x"), and joining one
+        # silently discards the destination, so the result is what gets checked.
+        if not out.resolve().is_relative_to(inside):
+            return None
+        return out
 
     if archive.name.endswith(".zip"):
         with zipfile.ZipFile(archive) as z:

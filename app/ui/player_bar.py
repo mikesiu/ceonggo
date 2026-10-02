@@ -9,12 +9,19 @@ from pathlib import Path
 
 from PySide6.QtCore import QRectF, Qt, QUrl, Signal
 from PySide6.QtGui import QColor, QPainter
-from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer
+from PySide6.QtMultimedia import QAudioOutput, QMediaDevices, QMediaPlayer
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QSlider, QVBoxLayout, QWidget
 
 from app.i18n import t
 from app.songs import Song
 from app.ui import theme
+
+
+#: Default gap between the player's clock and the speakers. Remote Desktop
+#: redirects audio to the client and buffers it; a local card does not need
+#: compensating. Settings overrides both - see ScoreEditor.latency_ms.
+REMOTE_LATENCY_MS = 250
+LOCAL_LATENCY_MS = 0
 
 
 def clock(ms: int) -> str:
@@ -79,6 +86,13 @@ class PlayerBar(QFrame):
         self.setStyleSheet(f"QFrame#PlayerBar{{background:{theme.SURFACE};border-top:1px solid {theme.LINE};}}")
         self.song: Song | None = None
         self.file_path = ""                 # set when playing a loose file (the Cover original)
+        self.latency_ms = 0                 # resolved in set_output_device
+        self._wanted_device = ""
+        # Connecting to or leaving a Remote Desktop session replaces the whole
+        # output list - and its latency - underneath a running app, so the choice
+        # is re-resolved instead of left pointing at a device that has gone.
+        self._devices = QMediaDevices(self)
+        self._devices.audioOutputsChanged.connect(lambda: self.set_output_device(self._wanted_device))
         self.player = QMediaPlayer(self)
         self.audio = QAudioOutput(self)
         self.player.setAudioOutput(self.audio)
@@ -130,7 +144,65 @@ class PlayerBar(QFrame):
         self.player.positionChanged.connect(self._on_position)
         self.player.durationChanged.connect(lambda d: self.length.setText(clock(d)))
         self.player.playbackStateChanged.connect(self._on_state)
+        self.player.errorOccurred.connect(self._on_error)
         self.play_btn.setEnabled(False)
+
+    # --- output ----------------------------------------------------------
+    @staticmethod
+    def output_latency_ms() -> int:
+        """How far the player's clock runs ahead of the speakers, in milliseconds.
+
+        ``QMediaPlayer.position()`` reports what has been handed to the sound card,
+        not what has reached the ears. On a local card the gap is small enough to
+        ignore; over Remote Desktop the audio is redirected to the client and a
+        measured sink buffer was 250 ms - about one quaver at 73 BPM, which is
+        how far ahead the score editor's playhead ran.
+
+        The figure was once measured by starting a QAudioSink here, which crashed
+        the app roughly one start in three: QBuffer keeps a *pointer* to the
+        QByteArray it is given, and both were Python locals that went out of scope
+        while the audio thread was still reading them. Asking Windows whether this
+        is a remote session costs nothing and cannot use freed memory. Settings
+        exposes the number for anyone whose device needs a different one.
+        """
+        try:
+            import ctypes
+
+            remote = bool(ctypes.windll.user32.GetSystemMetrics(0x1000))   # SM_REMOTESESSION
+        except Exception:      # noqa: BLE001 - not Windows, or no user32; assume local
+            remote = False
+        return REMOTE_LATENCY_MS if remote else LOCAL_LATENCY_MS
+
+    @staticmethod
+    def output_devices() -> list[str]:
+        """Descriptions of every audio output, the system default first."""
+        return [d.description() for d in QMediaDevices.audioOutputs()]
+
+    def set_output_device(self, description: str = "") -> None:
+        """Send sound to a named output, or to the Windows default when empty.
+
+        Qt follows the Windows default, which is not always where the user is
+        listening: a USB S/PDIF adapter can hold the default while the speakers
+        are on the monitor, and then a song plays perfectly to nowhere. There is
+        no error to report in that case, so the only cure is letting them choose.
+        """
+        self._wanted_device = description
+        chosen = QMediaDevices.defaultAudioOutput()
+        if description:
+            for device in QMediaDevices.audioOutputs():
+                if device.description() == description:
+                    chosen = device
+                    break
+        self.audio.setDevice(chosen)
+        #: Re-measured per device: a remote session buffers far more than a local card.
+        self.latency_ms = self.output_latency_ms()
+
+    def _on_error(self, error, text: str) -> None:
+        """Nothing was connected to errorOccurred, so a file Qt could not decode
+        just sat there looking idle. Say so where the style line goes."""
+        if error != QMediaPlayer.NoError:
+            self.subtitle.setText(t("This song could not be played: {why}",
+                                    why=text or str(error)))
 
     def load(self, song: Song, autoplay: bool = True) -> None:
         if not song.has_audio:

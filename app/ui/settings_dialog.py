@@ -6,7 +6,7 @@ import subprocess
 import sys
 
 from PySide6.QtWidgets import (
-    QComboBox, QDialog, QHBoxLayout, QLabel, QMessageBox, QPushButton, QVBoxLayout,
+    QComboBox, QDialog, QHBoxLayout, QLabel, QMessageBox, QPushButton, QSpinBox, QVBoxLayout,
 )
 
 from app import gpu, i18n, paths
@@ -26,9 +26,10 @@ DECODERS = [("standard", N("Standard - best for listening")), ("legacy", N("Benc
 
 
 class SettingsDialog(QDialog):
-    def __init__(self, cfg: Config, parent=None):
+    def __init__(self, cfg: Config, parent=None, busy=None):
         super().__init__(parent)
         self.cfg = cfg
+        self._busy = busy or (lambda: False)
         self.language_changed = False
         self.setWindowTitle(t("Settings"))
         self.resize(560, 560)
@@ -56,7 +57,7 @@ class SettingsDialog(QDialog):
         self.performance = self._combo(PERFORMANCE, LEGACY_PERFORMANCE.get(current, current))
         auto = gpu.auto_memory(card)
         self.performance.setItemText(0, t("Automatic (recommended)") + f"  ·  {t(MODE_NAMES[auto])}")
-        note = QLabel(t("If a song runs out of memory, Gokuk retries it once in Lowest memory mode."))
+        note = QLabel(t("If a song runs out of memory, Ceonggo retries it once in Lowest memory mode."))
         note.setObjectName("Hint")
         note.setWordWrap(True)
         layout.addWidget(self.performance)
@@ -64,18 +65,61 @@ class SettingsDialog(QDialog):
         layout.addWidget(QLabel(t("Speed mode")))
         self.backend = self._combo(BACKENDS, cfg.get("backend"))
         layout.addWidget(self.backend)
+        if card is not None and card.vendor == "amd":
+            # Fast resolves to Safe on AMD (see requests.backend); say so rather
+            # than letting the box claim a mode the card never actually runs.
+            amd = QLabel(t("On AMD cards the safe path is also the faster one, so it is used "
+                           "whichever is picked here."))
+            amd.setObjectName("Hint")
+            amd.setWordWrap(True)
+            layout.addWidget(amd)
         layout.addWidget(QLabel(t("Audio decoder")))
         self.decoder = self._combo(DECODERS, cfg.get("decoder"))
         if not (paths.models_dir() / "YuE2-Vae-legacy" / "model.safetensors").is_file():
             self.decoder.model().item(1).setEnabled(False)
         layout.addWidget(self.decoder)
 
+        layout.addWidget(QLabel(t("Sound output")))
+        self.audio_device = QComboBox()
+        self.audio_device.addItem(t("System default"), "")
+        # Imported here, not at module scope: Setup ships without QtMultimedia.
+        from app.ui.player_bar import PlayerBar
+
+        for name in PlayerBar.output_devices():
+            self.audio_device.addItem(name, name)
+        self.audio_device.setCurrentIndex(max(0, self.audio_device.findData(cfg.get("audio_device", ""))))
+        layout.addWidget(self.audio_device)
+        device_note = QLabel(t("Pick a device if songs play silently - Windows may be sending sound "
+                               "somewhere you are not listening."))
+        device_note.setObjectName("Hint")
+        device_note.setWordWrap(True)
+        layout.addWidget(device_note)
+
+        sync_row = QHBoxLayout()
+        sync_row.addWidget(QLabel(t("Playback sync")))
+        sync_row.addStretch(1)
+        self.latency = QSpinBox()
+        self.latency.setRange(-1, 2000)              # -1 shows as Automatic
+        self.latency.setSingleStep(25)
+        self.latency.setSuffix(" ms")
+        self.latency.setSpecialValueText(t("Automatic"))
+        stored = cfg.get("playback_latency_ms")
+        self.latency.setValue(-1 if stored is None else int(stored))
+        sync_row.addWidget(self.latency)
+        layout.addLayout(sync_row)
+        sync_note = QLabel(t("How far the score editor's playhead is drawn behind the player's clock. "
+                             "Automatic measures the device; raise it if the bar still reaches a note "
+                             "before you hear it, which happens over Remote Desktop."))
+        sync_note.setObjectName("Hint")
+        sync_note.setWordWrap(True)
+        layout.addWidget(sync_note)
+
         layout.addSpacing(6)
         layout.addWidget(heading(t("Maintenance")))
         box, inner = panel(12, 8)
         row = QHBoxLayout()
         repair = QPushButton(t("Repair / add components…"))
-        repair.setToolTip(t("Opens Gokuk Setup"))
+        repair.setToolTip(t("Opens Ceonggo Setup"))
         repair.clicked.connect(self._setup)
         row.addWidget(repair)
         logs = QPushButton(t("Open log folder"))
@@ -115,6 +159,9 @@ class SettingsDialog(QDialog):
         self.cfg.set("performance", self.performance.currentData())
         self.cfg.set("backend", self.backend.currentData())
         self.cfg.set("decoder", self.decoder.currentData())
+        self.cfg.set("audio_device", self.audio_device.currentData() or "")
+        self.cfg.set("playback_latency_ms",
+                     None if self.latency.value() < 0 else self.latency.value())
         self.cfg.save()
         code = self.language.currentData()
         if code != i18n.current():
@@ -127,6 +174,14 @@ class SettingsDialog(QDialog):
         launch_setup()
 
     def _clean(self) -> None:
+        # cache/tmp is the running worker's TEMP, and cache/jobs holds both its job
+        # file and the path Stop writes its cancel flag to. Clearing either during a
+        # run breaks the song being made and turns Stop into a 20-second hard kill.
+        # Checked on the click, not at build time: a queued take can start meanwhile.
+        if self._busy():
+            QMessageBox.information(self, t("Settings"),
+                                    t("A song is being made - wait for it to finish, or press Stop first."))
+            return
         for name in ("tmp", "jobs", "scores"):
             shutil.rmtree(paths.cache_dir() / name, ignore_errors=True)
         QMessageBox.information(self, t("Settings"), t("Temporary files cleared."))

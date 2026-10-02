@@ -1,14 +1,14 @@
-"""The song library: one folder per song, readable without Gokuk.
+"""The song library: one folder per song, readable without Ceonggo.
 
     songs/2026-09-12_1422_city-lights/
         audio.flac        the song
         score.abc         the melody and chords YuE2 planned (or was given)
-        song.json         what Gokuk shows: title, style, lyrics, kind, seed, ...
+        song.json         what Ceonggo shows: title, style, lyrics, kind, seed, ...
         peaks.json        waveform summary for the player
         plan.json, request.json, result.json, *.npy   YuE2's own records
 
 Nothing is kept in a database, so copying, renaming or deleting a folder in
-Explorer is a perfectly good way to manage songs. Deleting from Gokuk moves
+Explorer is a perfectly good way to manage songs. Deleting from Ceonggo moves
 the folder to songs/_trash rather than destroying it.
 """
 from __future__ import annotations
@@ -22,6 +22,7 @@ from datetime import datetime
 from pathlib import Path
 
 from app import paths
+from app.i18n import t
 
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 TRASH = "_trash"
@@ -75,7 +76,7 @@ class Song:
     def settings(self) -> "SongSettings":
         """Everything needed to make this song again.
 
-        song.json holds what Gokuk shows; job.json (written by the engine for every
+        song.json holds what Ceonggo shows; job.json (written by the engine for every
         run, older songs included) holds exactly what was sent: planning mode, style
         strength and any score supplied. A cover's score in job.json has its chords
         removed, so the complete score is kept separately as input_score.abc.
@@ -139,7 +140,7 @@ class SongSettings:
     seed: int | None
     cfg_scale: float | None
     score: str                 # the score the run was given ("" if YuE2 wrote its own)
-    source_path: str           # covers: the original recording, if Gokuk knows where it is
+    source_path: str           # covers: the original recording, if Ceonggo knows where it is
     source_name: str
 
 
@@ -197,8 +198,8 @@ def export(song: Song, target: Path) -> Path:
         return target
     ffmpeg = paths.ffmpeg_bin() / "ffmpeg.exe"
     if not ffmpeg.is_file():
-        raise FileNotFoundError("FFmpeg is part of the Cover maker - install it with Gokuk Setup "
-                                "to export WAV or MP3.")
+        raise FileNotFoundError(t("FFmpeg is part of the Cover maker - install it with Ceonggo "
+                                  "Setup to export WAV or MP3."))
     codec = ["-c:a", "libmp3lame", "-b:a", "320k"] if suffix == ".mp3" else ["-c:a", "pcm_s24le"]
     title = ["-metadata", f"title={song.title}"]
     result = subprocess.run([str(ffmpeg), "-y", "-v", "error", "-i", str(song.audio), *codec, *title,

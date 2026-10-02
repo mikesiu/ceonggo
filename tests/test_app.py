@@ -10,14 +10,14 @@ ROOT = Path(__file__).resolve().parent.parent
 
 
 def test_paths_follow_root_override(tmp_path, monkeypatch):
-    monkeypatch.setenv("GOKUK_ROOT", str(tmp_path))
+    monkeypatch.setenv("CEONGGO_ROOT", str(tmp_path))
     assert paths.root() == tmp_path.resolve()
     assert paths.yue2_python() == tmp_path.resolve() / "runtime" / "yue2" / "python.exe"
     assert paths.settings_file().parent == tmp_path.resolve()
 
 
 def test_song_job_uses_profile(tmp_path, monkeypatch):
-    monkeypatch.setenv("GOKUK_ROOT", str(tmp_path))
+    monkeypatch.setenv("CEONGGO_ROOT", str(tmp_path))
     cfg = Config(tmp_path / "settings.json")
     cfg.set("performance", "16")                       # a setting saved by an older version
     job = rq.song_job(cfg, style="s", lyrics="l", cot="melody", seed=5, output_dir=tmp_path / "o", abc="X:1")
@@ -33,6 +33,85 @@ def test_worker_versions_match_the_window():
 
     for name in ("yue2", "sheetsage"):
         assert worker_version(ROOT / "workers" / f"{name}_worker.py") == EXPECTED_WORKER_VERSION
+
+
+def test_a_dev_venv_cannot_leak_into_a_worker(tmp_path, monkeypatch):
+    """Developing in a venv must not change what a downloaded runtime sees: it has
+    its own packages, and an inherited PYTHONHOME or VIRTUAL_ENV would break it."""
+    monkeypatch.setenv("CEONGGO_ROOT", str(tmp_path))
+    for name in ("VIRTUAL_ENV", "PYTHONPATH", "PYTHONHOME", "CONDA_PREFIX", "TORCH_HOME"):
+        monkeypatch.setenv(name, r"D:\leak")
+
+    from app.jobs.worker_proc import portable_environment
+
+    env = portable_environment()
+    assert not [k for k in env.keys()
+                if k in ("VIRTUAL_ENV", "CONDA_PREFIX", "PYTHONPATH", "PYTHONHOME")]
+    assert env.value("TORCH_HOME") != r"D:\leak"       # repointed inside the portable folder
+
+
+def test_clear_folder_never_empties_a_protected_folder(tmp_path):
+    """Retrying a job wipes its output folder, so a wrong output_dir must not be
+    able to name the library and take every song with it."""
+    from app.jobs.engine import _clear_folder
+
+    library = tmp_path / "songs"
+    song = library / "2026-01-01_night"
+    song.mkdir(parents=True)
+    (song / "partial.flac").write_bytes(b"x")
+    (song / "leftovers").mkdir()
+    (library / "another-song").mkdir()
+    protect = {library.resolve()}
+
+    assert _clear_folder(song, protect) is True
+    assert not any(song.iterdir()) and song.is_dir()       # emptied, not removed
+    assert _clear_folder(library, protect) is False
+    assert (library / "another-song").is_dir()             # the library is untouched
+    assert _clear_folder(tmp_path / "gone", protect) is True    # nothing to do
+
+
+def test_amd_cards_are_judged_without_the_nvidia_driver_gate():
+    amd = gpu.GPU("AMD Radeon AI PRO R9700", 32624, "32.0.31041.1004", "amd")
+    assert round(amd.vram_gib) == 32 and amd.vendor == "amd"
+    # 32.0.x is a Windows build number, not a ROCm one - comparing it to R570 would
+    # condemn every AMD card, so driver_number stays 0.0 and the gate never fires.
+    assert amd.driver_number == 0.0
+    assert gpu.auto_memory(amd) == "fast"
+    assert gpu.verdict(amd)[0] == "ok"
+    assert gpu.verdict(gpu.GPU("Radeon", 12288, "31.0.1", "amd"))[0] == "warn"
+
+
+def test_backend_picks_eager_on_amd(tmp_path, monkeypatch):
+    """YuE2's CUDA-graph path is a pessimisation on ROCm: the same song measured
+    293.6s through it against 151.2s eager, so AMD must not get it by default."""
+    monkeypatch.setenv("CEONGGO_ROOT", str(tmp_path))
+    cfg = Config(tmp_path / "settings.json")
+    nvidia = gpu.GPU("RTX A4000", 16376, "581.57", "nvidia")
+    amd = gpu.GPU("AMD Radeon AI PRO R9700", 32624, "32.0.31041.1004", "amd")
+
+    monkeypatch.setattr(gpu, "detect", lambda: nvidia)
+    assert rq.backend(cfg) == "torch"
+    monkeypatch.setattr(gpu, "detect", lambda: amd)
+    assert rq.backend(cfg) == "torch-eager"
+    assert rq.song_job(cfg, style="s", lyrics="l", cot="full", seed=1,
+                       output_dir=tmp_path)["backend"] == "torch-eager"
+    cfg.set("backend", "torch-eager")          # an explicit choice is still honoured
+    assert rq.backend(cfg) == "torch-eager"
+    monkeypatch.setattr(gpu, "detect", lambda: None)
+    cfg.set("backend", "torch")
+    assert rq.backend(cfg) == "torch"          # no card, nothing to second-guess
+
+
+def test_rocm_failures_reach_the_eager_retry():
+    """ROCm names the kernel that failed, not the CUDA family it belongs to, so
+    none of the original hints matched and the fast path failed without retrying."""
+    from app.jobs.engine import RETRY_HINTS
+
+    for message in ("RuntimeError: [ROCm] mha_varlen_fwd: seqused_k must be nullopt",
+                    "RuntimeError: No available kernel. Aborting execution.",
+                    "MIOpen Error: could not find a solver",
+                    "HIP error: invalid device function"):
+        assert any(h in message.lower() for h in RETRY_HINTS), message
 
 
 def test_gpu_profiles_and_verdict():

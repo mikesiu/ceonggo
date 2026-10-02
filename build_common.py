@@ -1,7 +1,7 @@
-"""What the Gokuk builds leave out, and why (after EasyAI's build_common.py).
+"""What the Ceonggo builds leave out, and why (after EasyAI's build_common.py).
 
 The build machine's Python carries torch, transformers, numpy and the rest.
-Gokuk and Gokuk Setup never import any of them - the engines run in their own
+Ceonggo and Ceonggo Setup never import any of them - the engines run in their own
 downloaded runtimes - so anything that is merely importable must be kept out,
 or a 40 MB download becomes 4 GB.
 

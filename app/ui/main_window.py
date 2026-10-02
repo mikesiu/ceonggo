@@ -1,4 +1,4 @@
-"""The Gokuk window: Create, Cover and Library tabs above a player bar."""
+"""The Ceonggo window: Create, Cover and Library tabs above a player bar."""
 from __future__ import annotations
 
 import shutil
@@ -31,9 +31,12 @@ class MainWindow(QMainWindow):
         self.cfg = cfg
         self.install = install
         self.library = Library(cfg.songs_dir())
-        self.engine = Engine(self)
+        # The library and the transcription cache hold every song and score; a job
+        # may only ever empty a folder inside them, never one of them.
+        self.engine = Engine(self, protect=[self.library.root, paths.cache_dir() / "scores",
+                                            paths.root()])
         self.gpu = gpu.detect()
-        self.setWindowTitle("Gokuk")
+        self.setWindowTitle("Ceonggo")
         self.resize(1480, 920)
         self.setMinimumSize(1180, 760)
         self._build()
@@ -45,6 +48,7 @@ class MainWindow(QMainWindow):
 
     def _build(self) -> None:
         self.player = PlayerBar()       # first: the tabs' song cards connect to it
+        self.player.set_output_device(self.cfg.get("audio_device", ""))
         page = QWidget()
         outer = QVBoxLayout(page)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -53,7 +57,7 @@ class MainWindow(QMainWindow):
         header = QHBoxLayout()
         header.setContentsMargins(20, 6, 16, 0)
         logo = QLabel(f"<span style='font-size:21px;font-weight:900;color:{theme.ACCENT}'>●</span>"
-                      f"<span style='font-size:21px;font-weight:900'>&nbsp;Gokuk</span>")
+                      f"<span style='font-size:21px;font-weight:900'>&nbsp;Ceonggo</span>")
         header.addWidget(logo)
         header.addSpacing(18)
 
@@ -111,8 +115,12 @@ class MainWindow(QMainWindow):
         """Open the score editor; whatever the user chooses is routed from here."""
         from app.ui.score_editor import ScoreEditor
 
+        override = self.cfg.get("playback_latency_ms")
         dialog = ScoreEditor(text, title=title, actions=actions, primary=primary,
-                             pause_player=self.player.player.pause, parent=self)
+                             pause_player=self.player.player.pause,
+                             audio_device=self.cfg.get("audio_device", ""),
+                             latency_ms=self.player.latency_ms if override is None else int(override),
+                             parent=self)
 
         def chosen(action: str, abc: str) -> None:
             if action == "sing" and on_sing:
@@ -219,13 +227,16 @@ class MainWindow(QMainWindow):
             self.cover_tab.create()
 
     def _settings(self) -> None:
-        dialog = SettingsDialog(self.cfg, self)
-        if dialog.exec() and dialog.language_changed:
-            QMessageBox.information(self, t("Settings"), t("The new language is used the next time Gokuk starts."))
+        dialog = SettingsDialog(self.cfg, self, busy=lambda: self.engine.busy)
+        accepted = dialog.exec()
+        if accepted:
+            self.player.set_output_device(self.cfg.get("audio_device", ""))
+        if accepted and dialog.language_changed:
+            QMessageBox.information(self, t("Settings"), t("The new language is used the next time Ceonggo starts."))
 
     def closeEvent(self, event) -> None:
         if self.engine.busy:
-            if QMessageBox.question(self, t("Quit Gokuk?"),
+            if QMessageBox.question(self, t("Quit Ceonggo?"),
                                     t("A song is still being made. Stop it and quit?")) != QMessageBox.Yes:
                 event.ignore()
                 return

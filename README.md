@@ -1,4 +1,4 @@
-# Gokuk
+# Ceonggo
 
 A portable Windows app for making music on your own graphics card, built on
 [YuE2](https://github.com/multimodal-art-projection/YuE) (songs) and
@@ -15,16 +15,16 @@ Three tabs, plus a score editor:
 - **Score editor** — see and edit the melody, chords and song parts as a piano roll.
 
 The look and structure follow EasyAI: the same dark theme with an orange accent, a separate
-**Gokuk Setup** program, and English + 繁體中文.
+**Ceonggo Setup** program, and English + 繁體中文.
 
 ## For users
 
-1. Unzip `Gokuk-v1.0.0.zip` somewhere with about 25 GB free (for example `D:\Gokuk`), not inside
+1. Unzip `Ceonggo-v1.0.0.zip` somewhere with about 25 GB free (for example `D:\Ceonggo`), not inside
    OneDrive or Program Files.
-2. Run **Gokuk Setup.exe**. It downloads about 16.5 GB, largest files first, showing the step,
+2. Run **Ceonggo Setup.exe**. It downloads about 16.5 GB, largest files first, showing the step,
    amount, speed, time left, the current file and a checklist. Cancel any time; running it again
    carries on from where it stopped.
-3. Run **Gokuk.exe**.
+3. Run **Ceonggo.exe**.
 
 ### What you need
 
@@ -103,12 +103,12 @@ Language, graphics-card mode, audio decoder, and maintenance (repair, log folder
 | Balanced | the singing model is parked in system memory while the sound is mixed |
 | Lowest memory | also mixes and decodes in smaller pieces (automatic below 24 GB) |
 
-If a song still runs out of memory, Gokuk retries it once in Lowest memory mode.
+If a song still runs out of memory, Ceonggo retries it once in Lowest memory mode.
 
 ## How it is put together
 
 ```
-Gokuk.exe / Gokuk Setup.exe   PySide6 windows (no torch inside)
+Ceonggo.exe / Ceonggo Setup.exe   PySide6 windows (no torch inside)
 runtime/yue2/                 standalone Python 3.12 + torch 2.10 cu128 + yue2-infer 0.1.6
 runtime/sheetsage/            standalone Python 3.11 + torch 2.8 cu128 (SheetSage2's pinned versions)
 runtime/ffmpeg/, runtime/uv/  FFmpeg 6.1 shared, uv
@@ -118,10 +118,11 @@ app/score/                    read, edit, write and preview scores (stdlib only)
 workers/                      the scripts the downloaded Pythons run
 ```
 
-- **Portable:** there are no venvs, since a venv stores absolute paths. Packages install straight
-  into the standalone Pythons. Every cache and temp folder (`HF_HOME`, `TORCH_HOME`, `TEMP` …)
-  points inside the folder, and nothing goes to `%APPDATA%` or the registry. Proven by moving the
-  runtime to another path and generating from there.
+- **Portable:** the runtimes carry no venvs, since a venv stores absolute paths. Packages install
+  straight into the standalone Pythons. Every cache and temp folder (`HF_HOME`, `TORCH_HOME`,
+  `TEMP` …) points inside the folder, and nothing goes to `%APPDATA%` or the registry. Proven by
+  moving the runtime to another path and generating from there. (Developing in a venv is a separate
+  matter and perfectly fine — see *Developing*.)
 - **Workers:** the window never imports torch. Each job is
   `runtime\…\python.exe workers\<name>_worker.py <job>.json`, reporting progress as JSON lines on
   stdout (`workers/_protocol.py`). To cancel, the window creates `<job>.cancel`. The worker exits
@@ -145,26 +146,73 @@ workers/                      the scripts the downloaded Pythons run
 | `pretty_midi` is source-only | built offline during Setup with the locked setuptools |
 | SheetSage2's CUDA 12.6 build has no RTX 50-series (`sm_120`) code | both runtimes use CUDA 12.8 builds, which still include Ampere and Ada |
 
+### AMD cards (ROCm)
+
+Verified end to end on a **Radeon AI PRO R9700** (RDNA4, `gfx1201`, 32 GB) under Windows:
+a 59.7 s song in 151 s, and a 3:26 recording transcribed in 49 s. Both runtimes run on
+AMD's Windows ROCm wheels (`rocm.nightlies.amd.com/v2/gfx120X-all`), which cover the
+`cp312` and `cp311` this project needs. `yue2-infer` is pure Python, and SheetSage2
+needed no changes at all.
+
+What the code does differently on AMD:
+
+| | |
+|---|---|
+| Detection | no `nvidia-smi` ships with a Radeon driver, and WMI's `AdapterRAM` is 32-bit (a 32 GB card reads as 4 GB), so `gpu.py` reads `HardwareInformation.qwMemorySize` from the display-adapter registry |
+| Driver gate | AMD's `32.0.x` is a Windows build number, not a ROCm version, so the R570 check is skipped rather than failed |
+| Attention | ROCm rejects the `seqused_k` `GraphAR` passes to FlashAttention, and cuDNN attention raises "No available kernel", so `patch_attention` steers AMD to SDPA |
+| Decoder path | the CUDA-graph decoder is a *pessimisation* here — 293.6 s against 151.2 s eager on the same song — so `requests.backend` defaults AMD to `torch-eager` |
+| Retries | ROCm names the failing kernel rather than its family, so `RETRY_HINTS` carries `mha_varlen`, `rocm`, `miopen` and `no available kernel` |
+| Playback | over Remote Desktop audio is redirected to the client and buffers ~250 ms, so the score editor draws its playhead that far behind the player's clock |
+
+Setup installs the right one by itself. The catalogue carries both library environments —
+`env:yue2` / `env:sheetsage` marked `variant: nvidia`, and `env:yue2-rocm` /
+`env:sheetsage-rocm` marked `amd` — and `Catalog.items_for` picks by what `gpu.detect()`
+found. Everything else (models, the Python runtimes, uv, FFmpeg) is the same on either
+card and carries no variant. A machine with no readable card is treated as NVIDIA, so
+existing installs are unaffected. Crucially, **Repair on a Radeon no longer drops CUDA
+wheels over a working ROCm runtime** — the CUDA items are simply not in its plan.
+
+```bash
+python tools/build_manifest.py --rocm    # re-pin just the two AMD environments
+```
+
+**The catch:** AMD publishes these as dated nightlies and prunes old ones, so the pinned
+URLs have a shelf life — `ROCM_BUILDS` in `build_manifest.py` names one build per
+environment (the newest where that Python's torch, both ROCm SDK wheels and the `rocm`
+sdist all exist together). When they 404, re-run the command above. That is the one place
+this project's "pin everything, resolve nothing on the user's machine" rule is living on
+borrowed time.
+
+MIOpen's kernel cache also costs about 3x on the first decode until it warms.
+
 ## Developing
 
 ```bash
+python -m venv .venv                      # once; .venv is git-ignored
+.venv\Scripts\activate                    # PowerShell: .venv\Scripts\Activate.ps1
 pip install -r requirements-build.txt
-python -m pytest tests -q                 # 83 tests, no GPU needed
-python Gokuk.py                           # or Gokuk.bat / GokukSetup.bat
-set GOKUK_ROOT=D:\somewhere               # point either program at another portable folder
+python -m pytest tests -q                 # 89 tests, no GPU needed
+python Ceonggo.py                         # or Ceonggo.bat / CeonggoSetup.bat, which find .venv themselves
+set CEONGGO_ROOT=D:\somewhere             # point either program at another portable folder
 ```
+
+The venv is for developing only — PySide6, pytest and PyInstaller, nothing the engines use. The
+downloaded runtimes under `runtime/` still have no venv, on purpose (see *Portable* above), and a
+venv active in the shell cannot leak into them: the worker and Setup environments drop `VIRTUAL_ENV`
+and every `PYTHON*` variable before starting a runtime.
 
 Maintainer tools:
 
 ```bash
 python tools/build_manifest.py            # re-pin downloads -> setup/catalog.json + setup/locks/
 python tools/extract_strings.py           # translation coverage for lang/zh-Hant.json
-python tools/make_icons.py                # icons (uses Gokuk-Icon.png if present)
-python tools/build_release.py             # dist/Gokuk + release/Gokuk-v1.0.0.zip
+python tools/make_icons.py                # icons (uses Ceonggo-Icon.png if present)
+python tools/build_release.py             # dist/Ceonggo + release/Ceonggo-v1.0.0.zip
 ```
 
-`GOKUK_SMOKE_SHOT=<png>` makes either exe screenshot its window and quit; adding
-`GOKUK_SMOKE_CREATE=1` to `Gokuk.exe` makes it generate one song first. Both are how the built exes
+`CEONGGO_SMOKE_SHOT=<png>` makes either exe screenshot its window and quit; adding
+`CEONGGO_SMOKE_CREATE=1` to `Ceonggo.exe` makes it generate one song first. Both are how the built exes
 are smoke-tested.
 
 The tests cover the score core hardest, because a wrong score is the one bug a user could not

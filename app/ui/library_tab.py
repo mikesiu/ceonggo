@@ -1,4 +1,4 @@
-"""Library: every song Gokuk has made, newest first."""
+"""Library: every song Ceonggo has made, newest first."""
 from __future__ import annotations
 
 from PySide6.QtWidgets import (

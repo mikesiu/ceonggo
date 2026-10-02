@@ -1,4 +1,4 @@
-"""Is Gokuk installed? Asked by Gokuk at startup and by Setup for its cards.
+"""Is Ceonggo installed? Asked by Ceonggo at startup and by Setup for its cards.
 
 Setup writes setup_state.json when it finishes. That file alone is not trusted:
 a folder copied without its models, or a half-deleted runtime, would still
@@ -47,7 +47,7 @@ class InstallState:
 
     @property
     def ready(self) -> bool:
-        """Song creation is the minimum Gokuk can do anything with."""
+        """Song creation is the minimum Ceonggo can do anything with."""
         return "song" in self.components
 
     def has(self, component: str) -> bool:

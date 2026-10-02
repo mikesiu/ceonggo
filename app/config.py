@@ -17,6 +17,11 @@ DEFAULTS: dict[str, Any] = {
     # "torch" uses CUDA graphs (fastest); "torch-eager" is the safe fallback.
     "backend": "torch",
     "decoder": "standard",
+    # "" follows the Windows default output. Named explicitly when the default is
+    # not where the user is listening - see PlayerBar.set_output_device.
+    "audio_device": "",
+    # None = measure the output device; a number overrides it (see ScoreEditor).
+    "playback_latency_ms": None,
     "songs_dir": "songs",            # relative paths stay inside the portable folder
     "last_style": {},
     "last_lyrics": "",
