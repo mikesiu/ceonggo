@@ -1,7 +1,10 @@
 """The Ceonggo window: Create, Cover and Library tabs above a player bar."""
 from __future__ import annotations
 
+import json
 import shutil
+import time
+from pathlib import Path
 
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QKeySequence, QShortcut
@@ -14,7 +17,11 @@ from app import gpu, paths
 from app.config import Config
 from app.i18n import t
 from app.install_state import InstallState
-from app.jobs.engine import Engine
+from app.jobs import requests as rq
+from app.jobs.engine import Engine, Job
+from app.score import abc_dialect
+from app.score.model import Score
+from app.score.timing import Clock, fit_clock
 from app.songs import Library, Song
 from app.ui import theme
 from app.ui.cover_tab import CoverTab
@@ -34,7 +41,7 @@ class MainWindow(QMainWindow):
         # The library and the transcription cache hold every song and score; a job
         # may only ever empty a folder inside them, never one of them.
         self.engine = Engine(self, protect=[self.library.root, paths.cache_dir() / "scores",
-                                            paths.root()])
+                                            paths.cache_dir() / "auditions", paths.root()])
         self.gpu = gpu.detect()
         self.setWindowTitle("Ceonggo")
         self.resize(1480, 920)
@@ -112,7 +119,8 @@ class MainWindow(QMainWindow):
 
     def edit_score(self, text: str, *, title: str, origin: str, actions=("create", "cover"),
                    primary: str = "create", on_sing=None, lyrics: str = "", style: str = "",
-                   on_lyrics=None) -> None:
+                   on_lyrics=None, song_audio: str = "", seed: int | None = None, audition=None,
+                   song_clock=None) -> None:
         """Open the score editor; whatever the user chooses is routed from here.
 
         ``lyrics`` and ``style`` give a Cantonese song its Words lane. Words edited
@@ -121,6 +129,10 @@ class MainWindow(QMainWindow):
         the opening tab's hook: when the editor is left through Sing it now or a
         Use button with edited words, it gets them first, so its lyrics box shows
         what is about to be sung. Closing the editor changes nothing.
+
+        ``audition`` (normally ``self.audition``) lets the editor have one line sung
+        with ``seed``; ``song_audio`` is the finished song, to hear a line as it was,
+        and ``song_clock(on_done, on_fail)`` finds where that song really sings it.
         """
         from app.ui.score_editor import ScoreEditor
 
@@ -129,7 +141,8 @@ class MainWindow(QMainWindow):
                              pause_player=self.player.player.pause,
                              audio_device=self.cfg.get("audio_device", ""),
                              latency_ms=self.player.latency_ms if override is None else int(override),
-                             lyrics=lyrics, style=style, parent=self)
+                             lyrics=lyrics, style=style, song_audio=song_audio, seed=seed,
+                             audition=audition, song_clock=song_clock, parent=self)
 
         def chosen(action: str, abc: str) -> None:
             words = dialog.edited_lyrics()
@@ -142,6 +155,69 @@ class MainWindow(QMainWindow):
 
         dialog.chosen.connect(chosen)
         dialog.exec()
+
+    def audition(self, *, abc: str, lyrics: str, style: str, seed: int | None,
+                 on_start, on_done, on_fail) -> bool:
+        """Have YuE2 sing a short score (one line from the editor); True if it waits behind another job.
+
+        The clip goes to the cache, never the library: it is a try, not a song.
+        ``on_done`` gets the audio file, ``on_fail`` a message to show.
+        """
+        folder = paths.cache_dir() / "auditions" / f"{time.strftime('%Y%m%d-%H%M%S')}-{time.perf_counter_ns() % 10**6}"
+        data = rq.song_job(self.cfg, style=style, lyrics=lyrics, cot="full", seed=seed or rq.new_seed(),
+                           output_dir=folder, abc=abc)
+        queued = self.engine.busy
+
+        def failed(event: dict) -> None:
+            on_fail(t("Stopped") if event.get("kind") == "cancelled" else rq.friendly_error(event))
+
+        self.engine.submit(Job("yue2", data, on_start=on_start,
+                               on_done=lambda event: on_done(event.get("audio") or str(folder / "audio.flac")),
+                               on_fail=failed))
+        return queued
+
+    #: Beside each song: where its audio really sings the score (see app/score/timing.py).
+    CLOCK_FILE = "clock.json"
+
+    def song_clock(self, song: Song, on_done, on_fail) -> bool:
+        """Give ``on_done`` the song's clock, score seconds -> audio seconds.
+
+        YuE2 sings a few seconds off the score's clock. The first time, the song is
+        transcribed (SheetSage2, about half a minute) and its sung notes lined up
+        with the score; the clock is kept beside the song, so later it is instant.
+        Returns True when it was known already (``on_done`` has then been called).
+        """
+        saved = song.folder / self.CLOCK_FILE
+        try:
+            on_done(Clock.from_dict(json.loads(saved.read_text(encoding="utf-8"))))
+            return True
+        except (OSError, ValueError, KeyError, TypeError):
+            pass
+        folder = paths.cache_dir() / "scores" / f"clock-{time.strftime('%Y%m%d-%H%M%S')}"
+
+        def done(event: dict) -> None:
+            try:
+                playback = json.loads((Path(event.get("dir") or folder) / "playback.json").read_text(encoding="utf-8"))
+                score = Score.from_abc(song.score.read_text(encoding="utf-8"))
+            except (OSError, ValueError, abc_dialect.AbcError) as error:
+                on_fail(str(error))
+                return
+            heard = [(note["start"], note["pitch"]) for track in playback.get("tracks", [])
+                     if track.get("name") == "Vocal" for note in track.get("notes", [])]
+            written = [(float(n.onset) * 60 / score.bpm, n.pitch) for n in score.voices["Vocal"]]
+            clock = fit_clock(written, heard)
+            if clock is None:
+                on_fail(t("The singing could not be matched to the score."))
+                return
+            try:
+                saved.write_text(json.dumps(clock.to_dict()), encoding="utf-8")
+            except OSError:
+                pass                                   # still usable now; found again next time
+            on_done(clock)
+
+        self.engine.submit(Job("sheetsage", rq.transcribe_job(audio=song.audio, output_dir=folder), on_done=done,
+                               on_fail=lambda event: on_fail(rq.friendly_error(event))))
+        return False
 
     def use_score(self, text: str, target: str, origin: str, lyrics: str | None = None) -> None:
         """Hand a score (and any lyrics edited with it) to the Create or Cover tab, and show that tab."""
@@ -157,7 +233,9 @@ class MainWindow(QMainWindow):
         except OSError:
             return
         self.edit_score(abc, title=t("Score - {title}", title=song.title), origin=song.title,
-                        lyrics=song.lyrics, style=song.style)
+                        lyrics=song.lyrics, style=song.style, seed=song.seed, audition=self.audition,
+                        song_audio=str(song.audio) if song.audio.is_file() else "",
+                        song_clock=lambda done, fail: self.song_clock(song, done, fail))
 
     def _use_song_score(self, song: Song, target: str) -> None:
         try:

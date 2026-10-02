@@ -84,10 +84,17 @@ Opens from a song card's **Score** button, from **See / edit the score** on the 
   edit its line. The status line counts tone clashes, words without a note of their own, and notes
   without a new word. Edited words travel with the score to Create, Cover or **Sing it now**, and
   the lyrics box of the tab the editor was opened from shows them too (Ctrl+Z there brings the old
-  words back); closing the editor changes nothing. YuE2 places the words itself, so the lane is an estimate: it pairs syllables with notes in order, kept
+  words back); closing the editor changes nothing. To check a change by ear, a word's menu offers
+  **Hear … in the song** (the phrase around the word, from the finished song: YuE2 sings a few
+  seconds off the score's clock, so the first time the song is transcribed once, about half a
+  minute, and the timing kept beside it as `clock.json`) and
+  **Sing this line now**: YuE2 sings just that line's bars with the current words and notes, as a
+  short clip kept in the cache, never the library. It takes a few minutes, and given so little
+  score YuE2 tends to sing the line more than once. YuE2 places the words itself, so the lane is an estimate: it pairs syllables with notes in order, kept
   in step at the spaces and line ends of the lyrics and the rests of the melody.
 - **Use it** — **Make a song with this score** (Create) or **Make a cover with this score**
   (Cover), plus **Open .abc…** / **Save as .abc…** and an **ABC text** view for hand editing.
+  **Save lyrics…** keeps the words as a text file, edits included: an .abc has no place for them.
 
 Every score the editor sends is written in YuE2's own ABC dialect, read back and compared with what
 you edited; if anything differs it refuses rather than sending something else. The parser is
@@ -203,7 +210,7 @@ MIOpen's kernel cache also costs about 3x on the first decode until it warms.
 python -m venv .venv                      # once; .venv is git-ignored
 .venv\Scripts\activate                    # PowerShell: .venv\Scripts\Activate.ps1
 pip install -r requirements-build.txt
-python -m pytest tests -q                 # 119 tests, no GPU needed
+python -m pytest tests -q                 # 135 tests, no GPU needed
 python Ceonggo.py                         # or Ceonggo.bat / CeonggoSetup.bat, which find .venv themselves
 set CEONGGO_ROOT=D:\somewhere             # point either program at another portable folder
 ```

@@ -135,3 +135,31 @@ def test_align_a_large_song_quickly():
     result = L.align(L.syllables(text), spans)
     assert time.perf_counter() - started < 5
     assert all(result.starts) and result.crammed_count == 0
+
+
+def test_line_span_covers_a_line_and_its_held_notes():
+    text = "[Verse]\n一二\n三四"
+    spans = [(F(0), F(1)), (F(1), F(2)), (F(2), F(3)), (F(4), F(5)), (F(5), F(6))]
+    result = L.align(L.syllables(text), spans)
+    assert result.sings == [0, 1, 1, 2, 3]
+    assert L.line_span(result, 1) == (0, 2)
+    assert L.line_span(result, 2) == (3, 4)
+    assert L.line_span(result, 0) is None
+
+
+def test_audition_lyrics_tags_the_line_with_its_part():
+    text = "[Verse]\n搭上這尾班車\n[Chorus]\n就算多辛酸 也不想投訴  "
+    assert L.audition_lyrics(text, 3, "chorus") == "[Chorus]\n就算多辛酸 也不想投訴"
+    assert L.audition_lyrics(text, 1, "pre-chorus") == "[Pre-Chorus]\n搭上這尾班車"
+    assert L.audition_lyrics(text, 1, "") == "[Verse]\n搭上這尾班車"
+
+
+def test_a_phrase_is_the_words_between_spaces():
+    text = "[Verse]\n搭上這尾班車 靠向你那肩膊\nhold me, now"
+    spans = [(F(i), F(i + 1)) for i in range(12)] + [(F(13), F(14)), (F(14), F(15)), (F(16), F(17))]
+    result = L.align(L.syllables(text), spans)
+    chunk = next(s.chunk for s in result.syllables if s.text == "這")
+    assert L.chunk_text(result, chunk) == "搭上這尾班車"
+    assert L.line_span(result, chunk=chunk) == (0, 5)
+    assert L.line_span(result, 1) == (0, 11)
+    assert L.chunk_text(result, next(s.chunk for s in result.syllables if s.text == "hold")) == "hold me"

@@ -174,3 +174,33 @@ def test_every_pitch_spells_back_to_itself_in_every_key():
         for pitch in range(36, 96):
             letter, alteration, octave = theory.spell(pitch, key)
             assert abc_dialect.NATURAL[letter] + alteration + 12 * (octave + 1) == pitch, (key, pitch)
+
+
+@pytest.mark.parametrize("path", FIXTURES, ids=lambda p: p.name)
+def test_excerpt_is_a_score_of_its_own(path):
+    score = Score.from_abc(path.read_text(encoding="utf-8"))
+    first, last = min(2, score.bars - 1), min(5, score.bars - 1)
+    part = score.excerpt(first, last)
+    assert part.bars == last - first + 1 and part.meters == score.meters[first:last + 1]
+    assert part.key == score.key_at(first) and part.bpm == score.bpm
+    reread = Score.from_abc(to_abc(part))                        # YuE2's dialect accepts it
+    assert notes(reread) == notes(part) and notes(reread, "Ins") == notes(part, "Ins")
+    start, end = score.bar_start(first), score.bar_start(last + 1)
+    for voice in ("Vocal", "Ins"):
+        inside = sorted(p for t, p, d in notes(score, voice) if t < end and t + d > start)
+        assert sorted(p for _, p, _ in notes(part, voice)) == inside
+        assert all(t >= 0 and t + d <= part.length for t, _, d in notes(part, voice))
+
+
+def test_excerpt_cuts_notes_and_restates_the_chord():
+    from app.score.model import Note
+
+    score = Score.blank(bars=3)
+    score.voices["Vocal"] = [Note(F(3), 60, F(2)), Note(F(6), 62, F(4))]   # both cross a barline
+    score.chords = [(F(0), "C"), (F(9), "G")]
+    part = score.excerpt(1, 1)
+    assert notes(part) == [(F(0), 60, F(1)), (F(2), 62, F(2))]
+    assert part.chords == [(F(0), "C")]
+    assert Score.from_abc(to_abc(part)).chords == [(F(0), "C")]
+    with pytest.raises(ValueError):
+        score.excerpt(2, 1)

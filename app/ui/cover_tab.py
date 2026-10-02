@@ -342,7 +342,7 @@ class CoverTab(QWidget):
         self.window_.edit_score(self.score_text, title=t("Score - {title}", title=origin), origin=origin,
                                 actions=("create", "cover"), primary="cover",
                                 lyrics=self.lyrics.lyrics(), style=self.style_builder.style_text(),
-                                on_lyrics=self.lyrics.replace_all)
+                                on_lyrics=self.lyrics.replace_all, audition=self.window_.audition)
 
     def _load_score(self) -> None:
         path, _ = QFileDialog.getOpenFileName(self, t("Open a score"), str(Path.home()), t("ABC score") + " (*.abc)")

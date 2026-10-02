@@ -23,11 +23,12 @@ something else.
 from __future__ import annotations
 
 import hashlib
+import html
 from fractions import Fraction
 from pathlib import Path
 
 from PySide6.QtCore import QPoint, QRect, QRectF, Qt, QThread, QTimer, QUrl, Signal
-from PySide6.QtGui import QColor, QFont, QKeySequence, QPainter, QPen, QShortcut
+from PySide6.QtGui import QColor, QFont, QFontMetrics, QKeySequence, QPainter, QPen, QShortcut
 from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer
 from PySide6.QtWidgets import (
     QComboBox, QDialog, QFileDialog, QHBoxLayout, QInputDialog, QLabel, QMenu, QMessageBox,
@@ -38,8 +39,9 @@ from app import cantonese, paths
 from app.i18n import N, plural, t
 from app.score import abc_dialect, preview, theory
 from app.score.abc_write import WriteError, to_abc
-from app.score.lyrics import replace, replace_line
+from app.score.lyrics import audition_lyrics, chunk_text, line_span, replace, replace_line
 from app.score.model import History, Note, Score, UnsupportedScore
+from app.score.timing import Clock
 from app.ui import theme
 from app.ui.widgets import heading
 
@@ -47,7 +49,7 @@ F = Fraction
 KEY_W = 58
 RULER_H, SECTION_H, CHORD_H = 22, 24, 28
 HEAD_H = RULER_H + SECTION_H + CHORD_H
-LYRIC_H = 34                      # the Words lane, below the chords, when it is shown
+LYRIC_H = 50                      # the Words lane, below the chords, when it is shown
 ROW_H = 13
 EDGE_PX = 6
 
@@ -93,6 +95,8 @@ class RollCanvas(QWidget):
         #: (line, col) -> (character, reading) the user picked for the tone check.
         self.readings: dict[tuple[int, int], tuple[str, str]] = {}
         self._words_memo: tuple[tuple, cantonese.WordCheck] | None = None
+        #: Set by the dialog: line -> [(label, action)] to hear a lyric line.
+        self.line_actions = None
         self.voice = "Vocal"
         self.snap = F(1, 2)
         self.ppq = 36.0                     # pixels per quarter note
@@ -341,49 +345,58 @@ class RollCanvas(QWidget):
         notes = self._vocal()
         check = self.words()
         align = check.alignment
-        mono = QFont(theme.MONO_FONT)
-        mono.setPixelSize(9)
+        starts = [i for i, start in enumerate(align.starts) if start]
+        # A word's text may run on over its held notes and the gap before the next
+        # word; only the next word's start limits it.
+        room_end = {i: (self.x_of(notes[nxt].onset) if nxt is not None else self.x_of(notes[i].end) + 80)
+                    for i, nxt in zip(starts, starts[1:] + [None])}
+        char_font, small_char = QFont(theme.UI_FONT), QFont(theme.UI_FONT)
+        char_font.setPixelSize(18)
+        small_char.setPixelSize(14)
+        reading_font = QFont(theme.UI_FONT)
+        reading_font.setPixelSize(12)
+        reading_metrics = QFontMetrics(reading_font)
         for index, note in enumerate(notes):
             x0, x1 = self.x_of(note.onset), self.x_of(note.end)
-            if x1 < view.left() or x0 > view.right():
+            if x1 < view.left() or x0 > view.right() + 120:
                 continue
             cell = QRectF(x0 + 1, y + 2, max(2.0, x1 - x0 - 2), LYRIC_H - 4)
             sung = align.sings[index]
             if sung is None:
                 p.setPen(Qt.NoPen)
                 p.setBrush(QColor(theme.DIM))
-                p.drawEllipse(QRectF(cell.center().x() - 1.5, y + 11, 3, 3))
+                p.drawEllipse(QRectF(cell.center().x() - 2, y + 14, 4, 4))
             elif not align.starts[index]:
-                p.fillRect(QRectF(cell.left(), y + 12, cell.width(), 1.5), QColor(theme.DIM))
+                p.fillRect(QRectF(cell.left(), y + 15, cell.width(), 2), QColor(theme.DIM))
             else:
                 fit = check.fit[sung]
                 colour = QColor(theme.BAD if fit == "clash" else theme.WARN if fit == "mild" else theme.SURFACE_2)
                 p.setPen(Qt.NoPen)
                 if fit in ("clash", "mild"):
                     # A full-strength bar under the cell: a faint tint alone reads as brown here.
-                    p.fillRect(QRectF(cell.left(), cell.bottom() - 2, cell.width(), 2), colour)
+                    p.fillRect(QRectF(cell.left(), cell.bottom() - 3, cell.width(), 3), colour)
                     colour.setAlpha(110 if fit == "clash" else 50)
                 p.setBrush(colour)
                 p.drawRoundedRect(cell, 3, 3)
-                p.save()
-                p.setClipRect(cell)
-                font = QFont(theme.UI_FONT)
-                font.setPixelSize(14 if cell.width() >= 15 else 10)
-                p.setFont(font)
-                p.setPen(QColor(theme.TEXT))
-                p.drawText(QRectF(cell.left() + 2, cell.top(), cell.width() + 20, 17), Qt.AlignVCenter,
-                           align.syllables[sung].text)
+                room = room_end[index] - x0 - 3
+                # Too narrow even for the smaller character: draw nothing rather than
+                # a clipped fragment that looks like another character. Zoom in, or
+                # click the cell, to see it.
+                font = char_font if room >= 20 else small_char if room >= 15 else None
+                if font is not None:
+                    p.setFont(font)
+                    p.setPen(QColor(theme.TEXT))
+                    p.drawText(QRectF(x0 + 2, y + 2, room, 26), Qt.AlignVCenter, align.syllables[sung].text)
                 reading = check.readings[sung]
-                if reading and cell.width() >= 8:
-                    p.setFont(mono)
+                if reading and font is not None:
+                    label = reading if reading_metrics.horizontalAdvance(reading) <= room else reading[-1]
+                    p.setFont(reading_font)
                     p.setPen(QColor(theme.MUTED))
-                    p.drawText(QRectF(cell.left() + 2, cell.top() + 16, cell.width(), 12), Qt.AlignVCenter,
-                               reading if cell.width() >= 24 else reading[-1])
-                p.restore()
+                    p.drawText(QRectF(x0 + 2, y + 27, room, 16), Qt.AlignVCenter, label)
             if align.crammed.get(index):
-                p.setFont(mono)
+                p.setFont(reading_font)
                 p.setPen(QColor(theme.BAD))
-                p.drawText(QRectF(cell.right() - 22, cell.top(), 22, cell.height()), Qt.AlignRight | Qt.AlignTop,
+                p.drawText(QRectF(cell.right() - 30, cell.top(), 30, 16), Qt.AlignRight | Qt.AlignVCenter,
                            f"+{len(align.crammed[index])}")
 
     def _paint_keyboard(self, p: QPainter, view: QRect) -> None:
@@ -711,6 +724,11 @@ class RollCanvas(QWidget):
         if squeezed:
             extra = "".join(align.syllables[i].text for i in squeezed)
             menu.addAction(t("Squeezed onto this note: {words}", words=extra)).setEnabled(False)
+        actions = self.line_actions(syl) if self.line_actions else []
+        if actions:
+            menu.addSeparator()
+            for label, action in actions:
+                menu.addAction(label, action)
         if sung is not None and syl.cjk and cantonese.available():
             menu.addSeparator()
             options = cantonese.candidates(syl.text)
@@ -779,13 +797,24 @@ class ScoreEditor(QDialog):
 
     def __init__(self, text: str, *, title: str, actions: tuple[str, ...] = ("create", "cover"),
                  primary: str = "create", pause_player=None, audio_device: str = "",
-                 latency_ms: int = 0, lyrics: str = "", style: str = "", parent=None):
+                 latency_ms: int = 0, lyrics: str = "", style: str = "", song_audio: str = "",
+                 seed: int | None = None, audition=None, song_clock=None, parent=None):
         super().__init__(parent)
         self.setWindowTitle(title)
         self.resize(1360, 860)
         self.setMinimumSize(1000, 640)
         self.original_text = text
         self.original_lyrics = lyrics
+        self.style, self.seed, self.song_audio, self.audition = style, seed, song_audio, audition
+        self.song_clock = song_clock
+        self._clock: Clock | None = None          # where the song really sings the score
+        self._clock_failed = False
+        self._waiting_to_hear: int | None = None  # a phrase asked for while the clock is found
+        self._tries: dict[int, tuple[str, int]] = {}     # lyric line -> (clip, its offset in ms)
+        self._singing = False
+        self._closed = False
+        self._audition_note = ""
+        self._song_bpm = 90
         self.words_lane = bool(lyrics.strip()) and cantonese.is_cantonese(style)
         self.pause_player = pause_player
         self.audio_device = audio_device
@@ -801,6 +830,7 @@ class ScoreEditor(QDialog):
         try:
             self.history = History(Score.from_abc(text))
             self.history.score.lyrics = lyrics
+            self._song_bpm = self.history.score.bpm     # the finished song's clock
             self.original_key = self.history.score.key
             self.visual_error = ""
         except UnsupportedScore as error:
@@ -831,6 +861,12 @@ class ScoreEditor(QDialog):
         save_btn = QPushButton(t("Save as .abc…"))
         save_btn.clicked.connect(self._save_file)
         top.addWidget(save_btn)
+        # The ABC has no place for words, so edited lyrics get their own file.
+        self.save_lyrics_btn = QPushButton(t("Save lyrics…"))
+        self.save_lyrics_btn.setToolTip(t("Save the lyrics, with any words changed here, as a text file"))
+        self.save_lyrics_btn.clicked.connect(self._save_lyrics)
+        self.save_lyrics_btn.setVisible(bool(lyrics.strip()) and self.history is not None)
+        top.addWidget(self.save_lyrics_btn)
         layout.addLayout(top)
 
         # --- toolbar -----------------------------------------------------
@@ -884,7 +920,8 @@ class ScoreEditor(QDialog):
         bar.addWidget(heading(t("Zoom")))
         self.zoom = QSlider(Qt.Horizontal)
         self.zoom.setRange(12, 120)
-        self.zoom.setValue(36)
+        # With the Words lane a 16th note needs ~20 px for its character to be readable.
+        self.zoom.setValue(80 if self.words_lane else 36)
         self.zoom.setFixedWidth(110)
         bar.addWidget(self.zoom)
         bar.addStretch(1)
@@ -909,8 +946,10 @@ class ScoreEditor(QDialog):
             self.canvas = RollCanvas(self.history, lyrics_lane=self.words_lane)
             self.canvas.changed.connect(self._changed)
             self.canvas.readings_changed.connect(self._refresh)
+            self.canvas.line_actions = self._line_actions
             self.canvas.seek.connect(self._seek)
             self.zoom.valueChanged.connect(lambda v: self.canvas.set_zoom(float(v)))
+            self.canvas.set_zoom(float(self.zoom.value()))
             self.scroll.setWidget(self.canvas)
             self.scroll.horizontalScrollBar().valueChanged.connect(lambda _: self.canvas.update())
             self.scroll.verticalScrollBar().valueChanged.connect(lambda _: self.canvas.update())
@@ -946,6 +985,13 @@ class ScoreEditor(QDialog):
                 "Click a word to select its notes, choose its reading, or swap in a word that sounds the same."))
         self.hint.setObjectName("Hint")
         self.hint.setWordWrap(True)
+        # The Words lane's counts get a line of their own: tucked into the grey
+        # status line they were easy to miss, and they are what changes as you fix notes.
+        self.words_status = QLabel("")
+        self.words_status.setTextFormat(Qt.RichText)
+        self.words_status.setStyleSheet(f"color:{theme.TEXT};font-size:14px;")
+        self.words_status.setVisible(self.words_lane)
+        layout.addWidget(self.words_status)
         layout.addWidget(self.hint)
         self.status = QLabel("")
         self.status.setObjectName("Warning")
@@ -982,6 +1028,13 @@ class ScoreEditor(QDialog):
         self.player.setAudioOutput(self.audio)
         self.player.positionChanged.connect(self._on_position)
         self.player.playbackStateChanged.connect(self._on_play_state)
+        self._start_when_loaded: int | None = None     # see _play_file
+        self._loading_seen = False
+        self._stop_at: int | None = None
+        self._offset_ms = 0
+        self._follow = True
+        self._play_clock: Clock | None = None
+        self.player.mediaStatusChanged.connect(self._media_status)
 
         QShortcut(QKeySequence.Undo, self, activated=self._undo)
         QShortcut(QKeySequence.Redo, self, activated=self._redo)
@@ -1036,7 +1089,9 @@ class ScoreEditor(QDialog):
         if not score.voices["Vocal"]:
             notes.append("⚠  " + t("The vocal line has no notes."))
         if self.words_lane:
-            notes.append(self._words_summary())
+            note = f'<br><span style="color:{theme.ACCENT_2}">{html.escape(self._audition_note)}</span>' \
+                if self._audition_note else ""
+            self.words_status.setText(self._words_summary() + note)
         self.status.setObjectName("Warning" if any(n.startswith("⚠") for n in notes) else "Hint")
         self.status.setStyleSheet("")
         self.status.setText("   ·   ".join(notes))
@@ -1044,11 +1099,16 @@ class ScoreEditor(QDialog):
         self.status.style().polish(self.status)
 
     def _words_summary(self) -> str:
+        """The Words lane's counts as rich text, the tone clashes in red while there are any."""
         if not cantonese.available():
-            return t("Jyutping is not available, so the words have no tones: {why}", why=cantonese.failure())
+            return html.escape(t("Jyutping is not available, so the words have no tones: {why}",
+                                 why=cantonese.failure()))
         check = self.canvas.words()
+        clashes = html.escape(plural(check.clashes, "{n} tone clash", "{n} tone clashes"))
+        if check.clashes:
+            clashes = f'<b style="color:{theme.BAD}">{clashes}</b>'
         return t("Words: {clashes}, {crammed}, {extra}",
-                 clashes=plural(check.clashes, "{n} tone clash", "{n} tone clashes"),
+                 clashes=clashes,
                  crammed=plural(check.alignment.crammed_count, "{n} word without its own note",
                                 "{n} words without their own note"),
                  extra=plural(check.alignment.extra_notes, "{n} note without a new word",
@@ -1190,6 +1250,22 @@ class ScoreEditor(QDialog):
         self.canvas._fit_range()
         self._after_history()
 
+    def _save_lyrics(self) -> None:
+        if self.score is None:
+            return
+        path, _ = QFileDialog.getSaveFileName(self, t("Save lyrics"), str(Path.home() / "lyrics.txt"),
+                                              t("Text") + " (*.txt)")
+        if not path:
+            return
+        if not path.lower().endswith(".txt"):
+            path += ".txt"
+        try:
+            Path(path).write_text(self.score.lyrics, encoding="utf-8")
+        except OSError as error:
+            QMessageBox.warning(self, t("Save lyrics"), t("The lyrics could not be saved: {why}", why=error))
+            return
+        self.status.setText(t("Saved {path}", path=path))
+
     def _save_file(self) -> None:
         try:
             text = self.current_text()
@@ -1235,7 +1311,6 @@ class ScoreEditor(QDialog):
     def _rendered(self, file: str, digest: str) -> None:
         self._preview_hash, self._preview_file = digest, file
         self.play_btn.setEnabled(True)
-        self.player.setSource(QUrl.fromLocalFile(file))
         self._play_from_playhead()
 
     def _render_failed(self, message: str) -> None:
@@ -1244,12 +1319,63 @@ class ScoreEditor(QDialog):
         self.status.setText(t("The preview could not be made: {why}", why=message))
 
     def _play_from_playhead(self) -> None:
+        start = self.canvas.playhead if self.canvas else F(0)
+        self._play_file(self._preview_file, int(float(start) * 60 / self.score.bpm * 1000))
+
+    def _play_file(self, file: str, start_ms: int, *, stop_ms: int | None = None, offset_ms: int = 0,
+                   follow: bool = True, clock: Clock | None = None) -> None:
+        """Play ``file`` from ``start_ms``; the play line follows at file time + ``offset_ms``.
+
+        ``follow=False`` leaves the play line alone: a sung line's clip does not keep
+        the score's clock (see _sung). ``clock`` maps a song's audio to score time
+        instead of ``offset_ms`` (see _hear_in_song).
+
+        The preview, the finished song and a sung line share this one player. A seek
+        on media that is still loading is silently dropped - the first Play after a
+        render used to start at the top whatever the play line said - so a newly set
+        file is started from _media_status once it has loaded.
+        """
         if self.pause_player:
             self.pause_player()
-        self._play_from = self.canvas.playhead if self.canvas else F(0)
-        seconds = float(self._play_from) * 60 / self.score.bpm
-        self.player.setPosition(int(seconds * 1000))
-        self.player.play()
+        self._stop_at, self._offset_ms, self._follow, self._play_clock = stop_ms, offset_ms, follow, clock
+        self._play_from = self._time_at(self._score_ms(start_ms))
+        url = QUrl.fromLocalFile(file)
+        if self.player.source() == url and self.player.mediaStatus() not in (
+                QMediaPlayer.LoadingMedia, QMediaPlayer.NoMedia, QMediaPlayer.InvalidMedia):
+            self.player.setPosition(start_ms)
+            self.player.play()
+        else:
+            # Changing files, Qt can still report the old one as loaded before the new
+            # one starts loading; starting on that left the player "playing" at 0:00
+            # in silence. So stop first, and only start after this file has loaded.
+            self.player.stop()
+            self._start_when_loaded, self._loading_seen = start_ms, False
+            self.player.setSource(url)
+
+    def _score_ms(self, audio_ms: float) -> float:
+        """Where in the score ``audio_ms`` into what is playing falls."""
+        if self._play_clock:
+            return self._play_clock.score(audio_ms / 1000) * 1000
+        return audio_ms + self._offset_ms
+
+    def _time_at(self, ms: float) -> Fraction:
+        """Score time at ``ms`` into the music."""
+        if self.score is None:
+            return F(0)
+        return F(max(0.0, ms) / 1000 * self.score.bpm / 60).limit_denominator(64)
+
+    def _media_status(self, status) -> None:
+        if self._start_when_loaded is None:
+            return
+        if status == QMediaPlayer.LoadingMedia:
+            self._loading_seen = True
+        elif status in (QMediaPlayer.LoadedMedia, QMediaPlayer.BufferedMedia) and self._loading_seen:
+            start, self._start_when_loaded = self._start_when_loaded, None
+            self.player.setPosition(start)
+            self.player.play()
+        elif status == QMediaPlayer.InvalidMedia:
+            self._start_when_loaded = None
+            self.status.setText(t("The sound could not be played: {why}", why=self.player.errorString()))
 
     def showEvent(self, event) -> None:
         """Give the piano roll the keyboard the first time the window appears.
@@ -1293,15 +1419,21 @@ class ScoreEditor(QDialog):
         # pulled straight back to wherever Play had originally started.
         self._play_from = time
         if self.player.playbackState() == QMediaPlayer.PlayingState and self.score:
-            self.player.setPosition(int(float(time) * 60 / self.score.bpm * 1000))
+            score_ms = float(time) * 60 / self.score.bpm * 1000
+            audio_ms = self._play_clock.audio(score_ms / 1000) * 1000 if self._play_clock else score_ms - self._offset_ms
+            self.player.setPosition(max(0, int(audio_ms)))
 
     def _on_position(self, ms: int) -> None:
         if not self.canvas or not self.score or self.player.playbackState() != QMediaPlayer.PlayingState:
             return
         # What is being heard now was handed to the sound card latency_ms ago, and
         # never earlier than where Play started, so the bar does not jump backwards.
-        heard = max(0.0, ms - self.latency_ms) / 1000
-        time = max(self._play_from, F(heard * self.score.bpm / 60).limit_denominator(64))
+        if self._stop_at is not None and ms >= self._stop_at:
+            self._stop()                         # a line heard from the song ends with the line
+            return
+        if not self._follow:
+            return
+        time = max(self._play_from, self._time_at(self._score_ms(ms - self.latency_ms)))
         if time >= self.score.length:
             self._stop()
             return
@@ -1311,6 +1443,159 @@ class ScoreEditor(QDialog):
 
     def _on_play_state(self, state) -> None:
         self.play_btn.setText(t("❚❚  Pause") if state == QMediaPlayer.PlayingState else t("▶  Play"))
+
+    # --- hearing a line ----------------------------------------------------
+    def _line_actions(self, syl) -> list[tuple[str, object]]:
+        """Ways to hear the clicked word, each naming the words it will play.
+
+        Hearing the song plays the phrase around the word (up to the spaces), which
+        is what a listener calls the sentence; 「搭上這尾班車 靠向你那肩膊」 is one
+        lyric line but two phrases. Singing takes the whole line, so YuE2 has a
+        little more to go on.
+        """
+        line, actions = syl.line, []
+        words = self.score.lyrics.split("\n")[line].strip()
+        if self.song_audio:
+            phrase = chunk_text(self.canvas.words().alignment, syl.chunk)
+            actions.append((t("▶  Hear 「{words}」 in the song", words=phrase),
+                            lambda: self._hear_in_song(syl.chunk)))
+        if self.audition:
+            actions.append((t("▶  Sing 「{words}」 now (takes a few minutes)", words=words),
+                            lambda: self._sing_line(line)))
+        if line in self._tries:
+            actions.append((t("▶  Play the last try of 「{words}」 again", words=words),
+                            lambda: self._play_file(self._tries[line][0], 0, follow=False)))
+        return actions
+
+    def _line_notes(self, line: int | None = None, chunk: int | None = None) -> tuple[list[Note], int, int] | None:
+        """The vocal notes, and the first and last index sung on a lyric line or one phrase of it."""
+        span = line_span(self.canvas.words().alignment, line, chunk=chunk)
+        if span is None:
+            QMessageBox.information(self, t("Words"), t("No notes are sung on this line."))
+            return None
+        return self.canvas._vocal(), span[0], span[1]
+
+    def _hear_in_song(self, chunk: int) -> None:
+        """Play one phrase from the finished song, where the song really sings it.
+
+        YuE2 sings a few seconds off the score's clock (in 喺度, 2.4 s early at the
+        start and 0.15 s by the end), so the song's own clock is found first - once
+        per song, see MainWindow.song_clock. The clip runs from a beat before the
+        phrase (never back into the one before) to the next word.
+        """
+        if self._clock is None and self.song_clock and not self._clock_failed:
+            if self._waiting_to_hear is None:
+                self._waiting_to_hear = chunk
+                self._audition_status(self._finding_text())
+                self.song_clock(self._clock_found, self._clock_missing)
+            else:
+                self._waiting_to_hear = chunk
+            return
+        found = self._line_notes(chunk=chunk)
+        if found is None:
+            return
+        notes, a, b = found
+        beat = 60 / self._song_bpm
+        start = float(notes[a].onset) - 1
+        if a > 0:
+            start = max(start, float(notes[a - 1].end))
+        stop = float(notes[b].end) + 0.5
+        if b + 1 < len(notes):
+            stop = min(stop, float(notes[b + 1].onset))
+        clock = self._clock or Clock()
+        self._play_file(self.song_audio, max(0, int(clock.audio(start * beat) * 1000)),
+                        stop_ms=int(clock.audio(stop * beat) * 1000) + 50, clock=clock)
+
+    @staticmethod
+    def _finding_text() -> str:
+        return t("Finding where the song sings each line - about half a minute, once per song…")
+
+    def _clock_found(self, clock: Clock) -> None:
+        self._clock = clock
+        chunk, self._waiting_to_hear = self._waiting_to_hear, None
+        if self._closed:
+            return
+        if self._audition_note == self._finding_text():
+            self._audition_status("")
+        if chunk is not None:
+            self._hear_in_song(chunk)
+
+    def _clock_missing(self, message: str) -> None:
+        self._clock_failed = True
+        chunk, self._waiting_to_hear = self._waiting_to_hear, None
+        if self._closed:
+            return
+        self._audition_status(t("Could not find where the song sings each line, so it plays by the score "
+                                "and may be a few seconds off: {why}", why=message))
+        if chunk is not None:
+            self._hear_in_song(chunk)
+
+    def _sing_line(self, line: int) -> None:
+        """Have YuE2 sing just this line, with the words and notes as they are now.
+
+        The score sent is the line's bars plus one either side, with every other
+        line's vocal notes removed so nothing is sung without words.
+        """
+        if self._singing:
+            QMessageBox.information(self, t("Words"), t("A line is already being sung - wait for it to finish."))
+            return
+        found = self._line_notes(line)
+        if found is None:
+            return
+        notes, a, b = found
+        score = self.score
+        first = max(0, score.bar_of(notes[a].onset) - 1)
+        last = min(score.bars - 1, score.bar_of(notes[b].end - F(1, 64)) + 1)
+        keep = {notes[i].onset for i in range(a, b + 1)}
+        clone = score.copy()
+        clone.voices["Vocal"] = [n for n in clone.voices["Vocal"] if n.onset in keep]
+        try:
+            abc = to_abc(clone.excerpt(first, last))
+        except (WriteError, ValueError) as error:
+            QMessageBox.information(self, t("Words"), t("This line cannot be sung on its own: {why}", why=str(error)))
+            return
+        words = audition_lyrics(score.lyrics, line, score.section_at(score.bar_of(notes[a].onset)))
+        text = words.split("\n", 1)[1]
+        offset = int(float(score.bar_start(first)) * 60_000 / score.bpm)
+        singing = t("Singing 「{line}」 - this takes a few minutes…", line=text)
+        self._singing = True
+        queued = self.audition(abc=abc, lyrics=words, style=self.style, seed=self.seed,
+                               on_start=lambda: self._audition_status(singing),
+                               on_done=lambda path: self._sung(line, text, path, offset),
+                               on_fail=self._sing_failed)
+        self._audition_status(t("Waiting for the song being made to finish, then singing 「{line}」…", line=text)
+                              if queued else singing)
+
+    def _sung(self, line: int, text: str, path: str, offset: int) -> None:
+        """Play the clip whole, without the play line.
+
+        Given only a few bars, YuE2 treats them as a theme: in a test the exact
+        melody came a bar late and again 13 s later, with looser variations
+        around it, in a 30 s clip. So the clip is not on the score's clock - but
+        the line is in it, usually more than once.
+        """
+        self._singing = False
+        if self._closed:
+            return
+        self._tries[line] = (path, offset)
+        self._audition_status(t("Sung 「{line}」 - the singer may sing it more than once. "
+                                "Click a word in the line to play it again.", line=text))
+        self._play_file(path, 0, follow=False)
+
+    def _sing_failed(self, message: str) -> None:
+        self._singing = False
+        if not self._closed:
+            self._audition_status(t("The line could not be sung: {why}", why=message))
+
+    def _audition_status(self, text: str) -> None:
+        self._audition_note = text
+        self._refresh()
+
+    def done(self, result: int) -> None:
+        # A line still being sung finishes in the background; its result is ignored
+        # rather than the job cancelled, which would stop the user's songs too.
+        self._closed = True
+        super().done(result)
 
     # --- leaving ---------------------------------------------------------
     def _use(self, action: str) -> None:

@@ -193,6 +193,30 @@ def align(sylls: list[Syllable], spans: Sequence[tuple[Fraction, Fraction]]) -> 
     return Alignment(list(sylls), sings, starts, phrase, crammed)
 
 
+def line_span(alignment: Alignment, line: int | None = None, *, chunk: int | None = None) -> tuple[int, int] | None:
+    """The first and last note sung on lyric ``line``, or on one ``chunk`` (a phrase
+    between spaces), held notes included; None if nothing there has a note."""
+    notes = [i for i, sung in enumerate(alignment.sings) if sung is not None
+             and (line is None or alignment.syllables[sung].line == line)
+             and (chunk is None or alignment.syllables[sung].chunk == chunk)]
+    return (notes[0], notes[-1]) if notes else None
+
+
+def chunk_text(alignment: Alignment, chunk: int) -> str:
+    """The words of one chunk as written: Chinese run together, Latin words spaced."""
+    text = ""
+    for syl in alignment.syllables:
+        if syl.chunk == chunk:
+            text += (" " if text and not syl.cjk else "") + syl.text
+    return text
+
+
+def audition_lyrics(lyrics: str, line: int, section: str) -> str:
+    """One lyric line under the tag of the part it is sung in ("pre-chorus" -> "[Pre-Chorus]")."""
+    tag = " ".join("-".join(part.capitalize() for part in word.split("-")) for word in section.split())
+    return f"[{tag or 'Verse'}]\n{lyrics.split(chr(10))[line].strip()}"
+
+
 def replace(lyrics: str, line: int, col: int, length: int, text: str) -> str:
     """``lyrics`` with ``length`` characters at (line, col) replaced by ``text``."""
     lines = lyrics.split("\n")
