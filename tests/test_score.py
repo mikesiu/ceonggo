@@ -147,6 +147,20 @@ def test_history_undo_redo():
     assert history.redo() and len(notes(history.score)) == 1
 
 
+def test_lyrics_ride_along_but_never_reach_the_abc():
+    text = FIXTURES[2].read_text(encoding="utf-8")
+    score = Score.from_abc(text)
+    assert score.lyrics == ""
+    plain = to_abc(score)
+    score.lyrics = "[Verse]\n搭上這尾班車"
+    assert to_abc(score) == plain
+    history = History(score)
+    history.checkpoint()
+    history.score.lyrics = "[Verse]\n搭上呢尾班車"
+    assert history.undo() and history.score.lyrics == "[Verse]\n搭上這尾班車"
+    assert history.redo() and history.score.lyrics == "[Verse]\n搭上呢尾班車"
+
+
 def test_preview_length_matches_tempo():
     score = Score.from_abc(FIXTURES[2].read_text(encoding="utf-8"))
     audio = wave.open(io.BytesIO(preview.render(score)))

@@ -5,9 +5,11 @@ Layout, top to bottom inside the scrolling canvas:
     ruler      bar numbers - click to move the playhead, right-click for bars
     sections   VERSE / CHORUS bands - double-click to rename or start one
     chords     chord symbols - click to type one, right-click to remove
+    words      (Cantonese songs with lyrics) the syllable expected on each vocal
+               note, its Jyutping, and where the melody fights the word tones
     roll       note blocks against a keyboard, one colour per voice
 
-The keyboard and the three header lanes stay pinned while the roll scrolls:
+The keyboard and the header lanes stay pinned while the roll scrolls:
 the canvas paints them at the edge of whatever part is visible.
 
 Edits never touch the score while the mouse is down. A drag moves a ghost;
@@ -32,10 +34,11 @@ from PySide6.QtWidgets import (
     QPlainTextEdit, QPushButton, QScrollArea, QSlider, QSpinBox, QStackedWidget, QVBoxLayout, QWidget,
 )
 
-from app import paths
-from app.i18n import N, t
+from app import cantonese, paths
+from app.i18n import N, plural, t
 from app.score import abc_dialect, preview, theory
 from app.score.abc_write import WriteError, to_abc
+from app.score.lyrics import replace, replace_line
 from app.score.model import History, Note, Score, UnsupportedScore
 from app.ui import theme
 from app.ui.widgets import heading
@@ -44,6 +47,7 @@ F = Fraction
 KEY_W = 58
 RULER_H, SECTION_H, CHORD_H = 22, 24, 28
 HEAD_H = RULER_H + SECTION_H + CHORD_H
+LYRIC_H = 34                      # the Words lane, below the chords, when it is shown
 ROW_H = 13
 EDGE_PX = 6
 
@@ -51,6 +55,8 @@ SECTION_PRESETS = [N("intro"), N("verse"), N("pre-chorus"), N("chorus"), N("brid
                    N("interlude"), N("solo"), N("outro")]
 SNAPS = [(F(1), N("1/4")), (F(1, 2), N("1/8")), (F(1, 4), N("1/16"))]
 VOICE_LABELS = {"Vocal": N("Vocal"), "Ins": N("Instrument")}
+FIT_TEXT = {"clash": N("The melody moves against this word's tone, so it may be heard as another word."),
+            "mild": N("The melody and this word's tone do not quite move together.")}
 
 
 def describe(text_or_score) -> str:
@@ -78,10 +84,15 @@ def key_name(key: str) -> str:
 class RollCanvas(QWidget):
     changed = Signal()            # after every committed edit
     seek = Signal(object)         # Fraction: playhead moved by the user
+    readings_changed = Signal()   # a reading picked for the tone check (the score is unchanged)
 
-    def __init__(self, history: History, parent=None):
+    def __init__(self, history: History, lyrics_lane: bool = False, parent=None):
         super().__init__(parent)
         self.history = history
+        self.head_h = HEAD_H + (LYRIC_H if lyrics_lane else 0)
+        #: (line, col) -> (character, reading) the user picked for the tone check.
+        self.readings: dict[tuple[int, int], tuple[str, str]] = {}
+        self._words_memo: tuple[tuple, cantonese.WordCheck] | None = None
         self.voice = "Vocal"
         self.snap = F(1, 2)
         self.ppq = 36.0                     # pixels per quarter note
@@ -105,7 +116,7 @@ class RollCanvas(QWidget):
 
     def _resize(self) -> None:
         width = KEY_W + int(float(self.score.length) * self.ppq) + 240
-        height = HEAD_H + (self.top - self.bottom + 1) * ROW_H + 4
+        height = self.head_h + (self.top - self.bottom + 1) * ROW_H + 4
         self.setMinimumSize(width, height)
         self.resize(width, height)
 
@@ -121,10 +132,10 @@ class RollCanvas(QWidget):
         return F(max(0.0, (x - KEY_W) / self.ppq)).limit_denominator(64)
 
     def y_of(self, pitch: int) -> int:
-        return HEAD_H + (self.top - pitch) * ROW_H
+        return self.head_h + (self.top - pitch) * ROW_H
 
     def pitch_of(self, y: float) -> int:
-        return max(self.bottom, min(self.top, self.top - int((y - HEAD_H) // ROW_H)))
+        return max(self.bottom, min(self.top, self.top - int((y - self.head_h) // ROW_H)))
 
     def snapped(self, time: Fraction) -> Fraction:
         return F(int(time / self.snap)) * self.snap
@@ -140,6 +151,25 @@ class RollCanvas(QWidget):
         scroll = self.parent().parent() if self.parent() else None
         if isinstance(scroll, QScrollArea):
             scroll.ensureVisible(int(self.x_of(time)), int(self._visible().center().y()), 200, 0)
+
+    # --- words -----------------------------------------------------------
+    @property
+    def lyrics_lane(self) -> bool:
+        return self.head_h > HEAD_H
+
+    def _vocal(self) -> list[Note]:
+        return sorted(self.score.voices["Vocal"], key=lambda n: n.onset)
+
+    def words(self) -> cantonese.WordCheck:
+        """The syllable expected on each vocal note and its tone fit; recomputed only after a change."""
+        notes = self._vocal()
+        key = (self.score.lyrics, tuple((n.onset, n.end, n.pitch) for n in notes),
+               tuple(sorted(self.readings.items())))
+        if self._words_memo is None or self._words_memo[0] != key:
+            check = cantonese.check(self.score.lyrics, [(n.onset, n.end) for n in notes],
+                                    [n.pitch for n in notes], self.readings)
+            self._words_memo = (key, check)
+        return self._words_memo[1]
 
     # --- painting --------------------------------------------------------
     def paintEvent(self, _event) -> None:
@@ -170,9 +200,9 @@ class RollCanvas(QWidget):
                 x = int(self.x_of(starts[bar] + offset))
                 colour = QColor(theme.LINE_2) if offset == 0 else QColor(theme.LINE) if offset % 1 == 0 \
                     else QColor("#17171c")
-                p.fillRect(QRect(x, HEAD_H, 1, self.height() - HEAD_H), colour)
+                p.fillRect(QRect(x, self.head_h, 1, self.height() - self.head_h), colour)
                 offset += self.snap
-        p.fillRect(QRectF(end_x, HEAD_H, max(0, self.width() - end_x), self.height()), QColor("#050506"))
+        p.fillRect(QRectF(end_x, self.head_h, max(0, self.width() - end_x), self.height()), QColor("#050506"))
 
         # Notes: the voice being edited on top, in the accent.
         other = "Ins" if self.voice == "Vocal" else "Vocal"
@@ -204,7 +234,7 @@ class RollCanvas(QWidget):
 
         # Playhead.
         px = int(self.x_of(self.playhead))
-        p.fillRect(QRect(px, HEAD_H, 2, self.height()), QColor(theme.ACCENT))
+        p.fillRect(QRect(px, self.head_h, 2, self.height()), QColor(theme.ACCENT))
 
         self._paint_header(p, view)
         self._paint_keyboard(p, view)
@@ -224,9 +254,9 @@ class RollCanvas(QWidget):
     def _paint_header(self, p: QPainter, view: QRect) -> None:
         score = self.score
         top = view.top()
-        head = QRect(view.left(), top, view.width(), HEAD_H)
+        head = QRect(view.left(), top, view.width(), self.head_h)
         p.fillRect(head, QColor(theme.SURFACE))
-        p.fillRect(QRect(view.left(), top + HEAD_H - 1, view.width(), 1), QColor(theme.LINE_2))
+        p.fillRect(QRect(view.left(), top + self.head_h - 1, view.width(), 1), QColor(theme.LINE_2))
         small = QFont(theme.MONO_FONT)
         small.setPixelSize(10)
         bold = QFont(theme.UI_FONT)
@@ -243,7 +273,7 @@ class RollCanvas(QWidget):
             x = int(self.x_of(starts[bar]))
             if x < view.left() - 60 or x > view.right() + 2:
                 continue
-            p.fillRect(QRect(x, top, 1, HEAD_H), QColor(theme.LINE))
+            p.fillRect(QRect(x, top, 1, self.head_h), QColor(theme.LINE))
             if bar < score.bars:
                 label = str(bar + 1)
                 if bar == 0 or score.meters[bar] != score.meters[bar - 1]:
@@ -288,14 +318,73 @@ class RollCanvas(QWidget):
             p.setPen(QColor(theme.ACCENT_2))
             p.drawText(QRectF(x + 5, y, 90, CHORD_H), Qt.AlignVCenter, symbol.replace("b", "♭").replace("#", "♯"))
 
+        if self.lyrics_lane:
+            self._paint_words(p, view, top + HEAD_H)
+
         # Corner label over the keyboard.
-        corner = QRect(view.left(), top, KEY_W, HEAD_H)
+        corner = QRect(view.left(), top, KEY_W, self.head_h)
         p.fillRect(corner, QColor(theme.SURFACE))
         p.setFont(small)
         p.setPen(QColor(theme.DIM))
         p.drawText(QRect(view.left() + 6, top, KEY_W, RULER_H), Qt.AlignVCenter, t("Bar"))
         p.drawText(QRect(view.left() + 6, top + RULER_H, KEY_W, SECTION_H), Qt.AlignVCenter, t("Part"))
         p.drawText(QRect(view.left() + 6, top + RULER_H + SECTION_H, KEY_W, CHORD_H), Qt.AlignVCenter, t("Chord"))
+        if self.lyrics_lane:
+            p.drawText(QRect(view.left() + 6, top + HEAD_H, KEY_W, LYRIC_H), Qt.AlignVCenter, t("Words"))
+
+    def _paint_words(self, p: QPainter, view: QRect, y: int) -> None:
+        """One cell per vocal note: the syllable and its Jyutping, tinted where the tone fit is poor.
+
+        A held note (the syllable goes on) shows a line, a note with no word a dot,
+        and "+N" marks words squeezed onto a note with no note of their own.
+        """
+        notes = self._vocal()
+        check = self.words()
+        align = check.alignment
+        mono = QFont(theme.MONO_FONT)
+        mono.setPixelSize(9)
+        for index, note in enumerate(notes):
+            x0, x1 = self.x_of(note.onset), self.x_of(note.end)
+            if x1 < view.left() or x0 > view.right():
+                continue
+            cell = QRectF(x0 + 1, y + 2, max(2.0, x1 - x0 - 2), LYRIC_H - 4)
+            sung = align.sings[index]
+            if sung is None:
+                p.setPen(Qt.NoPen)
+                p.setBrush(QColor(theme.DIM))
+                p.drawEllipse(QRectF(cell.center().x() - 1.5, y + 11, 3, 3))
+            elif not align.starts[index]:
+                p.fillRect(QRectF(cell.left(), y + 12, cell.width(), 1.5), QColor(theme.DIM))
+            else:
+                fit = check.fit[sung]
+                colour = QColor(theme.BAD if fit == "clash" else theme.WARN if fit == "mild" else theme.SURFACE_2)
+                p.setPen(Qt.NoPen)
+                if fit in ("clash", "mild"):
+                    # A full-strength bar under the cell: a faint tint alone reads as brown here.
+                    p.fillRect(QRectF(cell.left(), cell.bottom() - 2, cell.width(), 2), colour)
+                    colour.setAlpha(110 if fit == "clash" else 50)
+                p.setBrush(colour)
+                p.drawRoundedRect(cell, 3, 3)
+                p.save()
+                p.setClipRect(cell)
+                font = QFont(theme.UI_FONT)
+                font.setPixelSize(14 if cell.width() >= 15 else 10)
+                p.setFont(font)
+                p.setPen(QColor(theme.TEXT))
+                p.drawText(QRectF(cell.left() + 2, cell.top(), cell.width() + 20, 17), Qt.AlignVCenter,
+                           align.syllables[sung].text)
+                reading = check.readings[sung]
+                if reading and cell.width() >= 8:
+                    p.setFont(mono)
+                    p.setPen(QColor(theme.MUTED))
+                    p.drawText(QRectF(cell.left() + 2, cell.top() + 16, cell.width(), 12), Qt.AlignVCenter,
+                               reading if cell.width() >= 24 else reading[-1])
+                p.restore()
+            if align.crammed.get(index):
+                p.setFont(mono)
+                p.setPen(QColor(theme.BAD))
+                p.drawText(QRectF(cell.right() - 22, cell.top(), 22, cell.height()), Qt.AlignRight | Qt.AlignTop,
+                           f"+{len(align.crammed[index])}")
 
     def _paint_keyboard(self, p: QPainter, view: QRect) -> None:
         left = view.left()
@@ -304,7 +393,7 @@ class RollCanvas(QWidget):
         p.setFont(font)
         for pitch in range(self.bottom, self.top + 1):
             y = self.y_of(pitch)
-            if y < view.top() + HEAD_H - ROW_H or y > view.bottom():
+            if y < view.top() + self.head_h - ROW_H or y > view.bottom():
                 continue
             black = pitch % 12 in (1, 3, 6, 8, 10)
             rect = QRect(left, y, KEY_W, ROW_H)
@@ -313,8 +402,8 @@ class RollCanvas(QWidget):
             if pitch % 12 == 0 or pitch in (self.top, self.bottom):
                 p.setPen(QColor("#111" if not black else theme.MUTED))
                 p.drawText(rect.adjusted(4, 0, 0, 0), Qt.AlignVCenter, theory.note_name(pitch, "C"))
-        if view.top() + HEAD_H > self.y_of(self.top):
-            p.fillRect(QRect(left, view.top(), KEY_W, HEAD_H), QColor(theme.SURFACE))
+        if view.top() + self.head_h > self.y_of(self.top):
+            p.fillRect(QRect(left, view.top(), KEY_W, self.head_h), QColor(theme.SURFACE))
         p.fillRect(QRect(left + KEY_W - 1, view.top(), 1, view.height()), QColor(theme.LINE_2))
 
     # --- hit testing -----------------------------------------------------
@@ -329,6 +418,8 @@ class RollCanvas(QWidget):
             return "sections"
         if y < HEAD_H:
             return "chords"
+        if y < self.head_h:
+            return "lyrics"
         return "roll"
 
     def _note_under(self, pos: QPoint) -> tuple[Note | None, bool]:
@@ -383,6 +474,9 @@ class RollCanvas(QWidget):
                     onset = self.snapped(time)
                     self._edit_chord(onset, "")
             return
+        if lane == "lyrics":
+            self._word_menu(time, event.globalPosition().toPoint())
+            return
         if lane != "roll":
             return
         note, edge = self._note_under(pos)
@@ -422,9 +516,10 @@ class RollCanvas(QWidget):
         pos = event.position().toPoint()
         drag = self._drag
         if not drag:
-            note, edge = self._note_under(pos) if self._lane(pos) == "roll" else (None, False)
-            self.setCursor(Qt.SizeHorCursor if edge else Qt.PointingHandCursor if note else Qt.CrossCursor
-                           if self._lane(pos) == "roll" else Qt.ArrowCursor)
+            lane = self._lane(pos)
+            note, edge = self._note_under(pos) if lane == "roll" else (None, False)
+            self.setCursor(Qt.SizeHorCursor if edge else Qt.PointingHandCursor if note or lane == "lyrics"
+                           else Qt.CrossCursor if lane == "roll" else Qt.ArrowCursor)
             return
         time = self.time_of(pos.x())
         ghost = drag.get("ghost")
@@ -588,6 +683,68 @@ class RollCanvas(QWidget):
         menu.addAction(t("Add 4 bars at the end"), lambda: self._commit(lambda s: s.add_bars(4)))
         menu.exec(where)
 
+    def _word_menu(self, time: Fraction, where: QPoint) -> None:
+        """What is known about the word on the vocal note at ``time``, and ways to change it.
+
+        Its notes are selected first (when the vocal line is being edited), so ↑/↓
+        can fix a tone clash straight after the menu closes.
+        """
+        notes = self._vocal()
+        index = next((i for i, n in enumerate(notes) if n.onset <= time < n.end), None)
+        if index is None:
+            return
+        check = self.words()
+        align = check.alignment
+        sung, squeezed = align.sings[index], align.crammed.get(index, [])
+        if sung is None and not squeezed:
+            return
+        menu = QMenu(self)
+        syl = align.syllables[sung if sung is not None else squeezed[0]]
+        if sung is not None:
+            if self.voice == "Vocal":
+                self.selected = [notes[i] for i in align.notes_of(sung)]
+                self.update()
+            reading = check.readings[sung]
+            menu.addAction(f"{syl.text}   {reading}" if reading else syl.text).setEnabled(False)
+            if check.fit[sung] in FIT_TEXT:
+                menu.addAction(t(FIT_TEXT[check.fit[sung]])).setEnabled(False)
+        if squeezed:
+            extra = "".join(align.syllables[i].text for i in squeezed)
+            menu.addAction(t("Squeezed onto this note: {words}", words=extra)).setEnabled(False)
+        if sung is not None and syl.cjk and cantonese.available():
+            menu.addSeparator()
+            options = cantonese.candidates(syl.text)
+            if len(options) > 1:
+                pick = menu.addMenu(t("Reading for the tone check"))
+                for option in options:
+                    action = pick.addAction(option, lambda o=option: self._choose_reading(syl, o))
+                    action.setCheckable(True)
+                    action.setChecked(option == reading)
+            same = menu.addMenu(t("Replace with a word that sounds the same"))
+            found = cantonese.homophones(reading, exclude=syl.text) if reading else []
+            for char in found:
+                same.addAction(char, lambda c=char: self._set_lyrics(
+                    replace(self.score.lyrics, syl.line, syl.col, len(syl.text), c)))
+            if not found:
+                same.addAction(t("None found among the common characters")).setEnabled(False)
+        menu.addSeparator()
+        menu.addAction(t("Edit this line…"), lambda: self._edit_line(syl.line))
+        menu.exec(where)
+
+    def _choose_reading(self, syl, reading: str) -> None:
+        self.readings[(syl.line, syl.col)] = (syl.text, reading)
+        self.update()
+        self.readings_changed.emit()
+
+    def _set_lyrics(self, lyrics: str) -> None:
+        self._commit(lambda s: setattr(s, "lyrics", lyrics))
+
+    def _edit_line(self, line: int) -> None:
+        current = self.score.lyrics.split("\n")[line]
+        text, ok = QInputDialog.getText(self, t("Words"), t("Line {n} of the lyrics:", n=line + 1), text=current)
+        if ok and text != current:
+            self._set_lyrics(replace_line(self.score.lyrics, line, text))
+
 
 # ---------------------------------------------------------------------------
 class PreviewRender(QThread):
@@ -609,7 +766,11 @@ class PreviewRender(QThread):
 
 # ---------------------------------------------------------------------------
 class ScoreEditor(QDialog):
-    """Open with ABC text; emits ``chosen(target, abc)`` for "sing" / "create" / "cover"."""
+    """Open with ABC text; emits ``chosen(target, abc)`` for "sing" / "create" / "cover".
+
+    Given the song's lyrics and style, a Cantonese song also gets the Words lane;
+    whoever receives ``chosen`` reads ``edited_lyrics()`` for words changed there.
+    """
 
     chosen = Signal(str, str)
 
@@ -618,12 +779,14 @@ class ScoreEditor(QDialog):
 
     def __init__(self, text: str, *, title: str, actions: tuple[str, ...] = ("create", "cover"),
                  primary: str = "create", pause_player=None, audio_device: str = "",
-                 latency_ms: int = 0, parent=None):
+                 latency_ms: int = 0, lyrics: str = "", style: str = "", parent=None):
         super().__init__(parent)
         self.setWindowTitle(title)
         self.resize(1360, 860)
         self.setMinimumSize(1000, 640)
         self.original_text = text
+        self.original_lyrics = lyrics
+        self.words_lane = bool(lyrics.strip()) and cantonese.is_cantonese(style)
         self.pause_player = pause_player
         self.audio_device = audio_device
         #: position() reports what the sound card has been given, not what has been
@@ -637,6 +800,7 @@ class ScoreEditor(QDialog):
         self._preview_file = ""
         try:
             self.history = History(Score.from_abc(text))
+            self.history.score.lyrics = lyrics
             self.original_key = self.history.score.key
             self.visual_error = ""
         except UnsupportedScore as error:
@@ -742,8 +906,9 @@ class ScoreEditor(QDialog):
         self.scroll.setWidgetResizable(False)
         self.scroll.setStyleSheet(f"QScrollArea{{border:1px solid {theme.LINE};border-radius:10px;}}")
         if self.history:
-            self.canvas = RollCanvas(self.history)
+            self.canvas = RollCanvas(self.history, lyrics_lane=self.words_lane)
             self.canvas.changed.connect(self._changed)
+            self.canvas.readings_changed.connect(self._refresh)
             self.canvas.seek.connect(self._seek)
             self.zoom.valueChanged.connect(lambda v: self.canvas.set_zoom(float(v)))
             self.scroll.setWidget(self.canvas)
@@ -774,6 +939,11 @@ class ScoreEditor(QDialog):
                              "Delete removes · ↑/↓ change pitch · Shift-drag selects several · "
                              "click the chord lane to add a chord · click the bar numbers or press "
                              "←/→/Home to move the play line · right-click bars and parts for more"))
+        if self.words_lane:
+            self.hint.setText(self.hint.text() + "\n" + t(
+                "Words shows the word expected on each note (an estimate - the singer places them itself). "
+                "Red: the melody moves against the word's tone, so it may be heard as another word. "
+                "Click a word to select its notes, choose its reading, or swap in a word that sounds the same."))
         self.hint.setObjectName("Hint")
         self.hint.setWordWrap(True)
         layout.addWidget(self.hint)
@@ -865,11 +1035,30 @@ class ScoreEditor(QDialog):
                                    n=f"{shift:+d}"))
         if not score.voices["Vocal"]:
             notes.append("⚠  " + t("The vocal line has no notes."))
+        if self.words_lane:
+            notes.append(self._words_summary())
         self.status.setObjectName("Warning" if any(n.startswith("⚠") for n in notes) else "Hint")
         self.status.setStyleSheet("")
         self.status.setText("   ·   ".join(notes))
         self.status.style().unpolish(self.status)
         self.status.style().polish(self.status)
+
+    def _words_summary(self) -> str:
+        if not cantonese.available():
+            return t("Jyutping is not available, so the words have no tones: {why}", why=cantonese.failure())
+        check = self.canvas.words()
+        return t("Words: {clashes}, {crammed}, {extra}",
+                 clashes=plural(check.clashes, "{n} tone clash", "{n} tone clashes"),
+                 crammed=plural(check.alignment.crammed_count, "{n} word without its own note",
+                                "{n} words without their own note"),
+                 extra=plural(check.alignment.extra_notes, "{n} note without a new word",
+                              "{n} notes without a new word"))
+
+    def edited_lyrics(self) -> str | None:
+        """The lyrics as edited in the Words lane, or None when they are unchanged."""
+        if self.score is None or self.score.lyrics.strip() == self.original_lyrics.strip():
+            return None
+        return self.score.lyrics
 
     def _changed(self) -> None:
         self.dirty = True
@@ -970,6 +1159,7 @@ class ScoreEditor(QDialog):
         except (abc_dialect.AbcError, UnsupportedScore, WriteError, ValueError) as error:
             self.status.setText(t("The text is not a valid score: {why}", why=str(error)))
             return False
+        new.lyrics = self.score.lyrics
         self.history.checkpoint()
         self.history.score = new
         self.canvas.history = self.history
@@ -993,6 +1183,7 @@ class ScoreEditor(QDialog):
         if self.history is None:
             QMessageBox.information(self, t("Open a score"), t("Close this window and open the file from the tab."))
             return
+        new.lyrics = self.score.lyrics
         self.history.checkpoint()
         self.history.score = new
         self.original_key = new.key

@@ -47,6 +47,10 @@ class Score:
     sections: list[tuple[int, str]] = field(default_factory=lambda: [(0, "verse")])
     chords: list[tuple[Fraction, str]] = field(default_factory=list)
     voices: dict[str, list[Note]] = field(default_factory=lambda: {v: [] for v in VOICES})
+    #: The words sung to this score. Not part of the ABC (YuE2 reads them as a
+    #: separate text) and never written by ``to_abc``; the editor keeps them here
+    #: so that undo and redo cover lyric edits too.
+    lyrics: str = ""
 
     @classmethod
     def blank(cls, bars: int = 8, meter: tuple[int, int] = (4, 4), **fields) -> "Score":

@@ -111,8 +111,13 @@ class MainWindow(QMainWindow):
         return card
 
     def edit_score(self, text: str, *, title: str, origin: str, actions=("create", "cover"),
-                   primary: str = "create", on_sing=None) -> None:
-        """Open the score editor; whatever the user chooses is routed from here."""
+                   primary: str = "create", on_sing=None, lyrics: str = "", style: str = "") -> None:
+        """Open the score editor; whatever the user chooses is routed from here.
+
+        ``lyrics`` and ``style`` give a Cantonese song its Words lane. Words edited
+        there travel with the score: ``on_sing(abc, lyrics)`` and the target tab
+        receive them, or None when they were left alone.
+        """
         from app.ui.score_editor import ScoreEditor
 
         override = self.cfg.get("playback_latency_ms")
@@ -120,32 +125,33 @@ class MainWindow(QMainWindow):
                              pause_player=self.player.player.pause,
                              audio_device=self.cfg.get("audio_device", ""),
                              latency_ms=self.player.latency_ms if override is None else int(override),
-                             parent=self)
+                             lyrics=lyrics, style=style, parent=self)
 
         def chosen(action: str, abc: str) -> None:
+            words = dialog.edited_lyrics()
             if action == "sing" and on_sing:
-                on_sing(abc)
+                on_sing(abc, words)
             else:
-                self.use_score(abc, action, origin)
+                self.use_score(abc, action, origin, lyrics=words)
 
         dialog.chosen.connect(chosen)
         dialog.exec()
 
-    def use_score(self, text: str, target: str, origin: str) -> None:
-        """Hand a score to the Create or Cover tab, and show that tab."""
-        if target == "cover":
-            self.cover_tab.set_score(text, origin)
-            self.show_tab(self.cover_tab)
-        else:
-            self.create_tab.set_score(text, origin)
-            self.show_tab(self.create_tab)
+    def use_score(self, text: str, target: str, origin: str, lyrics: str | None = None) -> None:
+        """Hand a score (and any lyrics edited with it) to the Create or Cover tab, and show that tab."""
+        tab = self.cover_tab if target == "cover" else self.create_tab
+        tab.set_score(text, origin)
+        if lyrics is not None:
+            tab.lyrics.replace_all(lyrics)
+        self.show_tab(tab)
 
     def show_score(self, song: Song) -> None:
         try:
             abc = song.score.read_text(encoding="utf-8")
         except OSError:
             return
-        self.edit_score(abc, title=t("Score - {title}", title=song.title), origin=song.title)
+        self.edit_score(abc, title=t("Score - {title}", title=song.title), origin=song.title,
+                        lyrics=song.lyrics, style=song.style)
 
     def _use_song_score(self, song: Song, target: str) -> None:
         try:

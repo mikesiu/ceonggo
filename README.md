@@ -76,6 +76,15 @@ Opens from a song card's **Score** button, from **See / edit the score** on the 
   shown with the change marked on the ruler, and so are bars in another metre.
 - **Play** — a plain synth preview of melody, instrument line and chords, so you can check the
   notes before spending minutes on a song.
+- **Words (Cantonese)** — for a Cantonese song with lyrics, a lane under the chords shows the word
+  expected on each vocal note with its Jyutping. Cantonese is sung on its tones: where the melody
+  moves against a word's tone (倒字) the word is heard as another one, and the cell turns red
+  (amber for a looser fit), following the 0243 rule lyricists use. Click a word to select its notes
+  (↑/↓ then fixes it), choose which reading it has, swap in a common word that sounds the same, or
+  edit its line. The status line counts tone clashes, words without a note of their own, and notes
+  without a new word. Edited words travel with the score to Create, Cover or **Sing it now**. YuE2
+  places the words itself, so the lane is an estimate: it pairs syllables with notes in order, kept
+  in step at the spaces and line ends of the lyrics and the rests of the melody.
 - **Use it** — **Make a song with this score** (Create) or **Make a cover with this score**
   (Cover), plus **Open .abc…** / **Save as .abc…** and an **ABC text** view for hand editing.
 
@@ -114,7 +123,8 @@ runtime/sheetsage/            standalone Python 3.11 + torch 2.8 cu128 (SheetSag
 runtime/ffmpeg/, runtime/uv/  FFmpeg 6.1 shared, uv
 models/                       YuE2-3B, YuE2-Vae, SheetSage2, MERT-v2-FullSong (pinned commits)
 songs/                        one plain folder per song (audio.flac, score.abc, song.json …)
-app/score/                    read, edit, write and preview scores (stdlib only)
+app/score/                    read, edit, write and preview scores; pair lyrics with notes (stdlib only)
+app/cantonese.py              Jyutping (ToJyutping) and the tone check for the editor's Words lane
 workers/                      the scripts the downloaded Pythons run
 ```
 
@@ -192,7 +202,7 @@ MIOpen's kernel cache also costs about 3x on the first decode until it warms.
 python -m venv .venv                      # once; .venv is git-ignored
 .venv\Scripts\activate                    # PowerShell: .venv\Scripts\Activate.ps1
 pip install -r requirements-build.txt
-python -m pytest tests -q                 # 89 tests, no GPU needed
+python -m pytest tests -q                 # 119 tests, no GPU needed
 python Ceonggo.py                         # or Ceonggo.bat / CeonggoSetup.bat, which find .venv themselves
 set CEONGGO_ROOT=D:\somewhere             # point either program at another portable folder
 ```
@@ -222,6 +232,7 @@ back restores it exactly, and every pitch in every key spells back to itself.
 ## Licences
 
 YuE2's code is Apache-2.0, and `app/score/abc_dialect.py` is adapted from its `abc_tools.py`
-(notice and licence in `licences/`, shipped with the release). The YuE2, SheetSage2 and MERT model
+(notice and licence in `licences/`, shipped with the release). The score editor's Jyutping comes
+from [ToJyutping](https://github.com/CanCLID/ToJyutping) (BSD-2, notice in `licences/`). The YuE2, SheetSage2 and MERT model
 weights are **CC BY-NC 4.0** (non-commercial), which Setup makes users acknowledge before
 downloading.

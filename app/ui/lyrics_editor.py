@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import QRegularExpression, Qt, Signal
-from PySide6.QtGui import QColor, QFont, QSyntaxHighlighter, QTextCharFormat
+from PySide6.QtGui import QColor, QFont, QSyntaxHighlighter, QTextCharFormat, QTextCursor
 from PySide6.QtWidgets import (
     QHBoxLayout, QLabel, QPlainTextEdit, QPushButton, QVBoxLayout, QWidget,
 )
@@ -79,6 +79,16 @@ class LyricsEditor(QWidget):
 
     def set_lyrics(self, text: str) -> None:
         self.text.setPlainText(text)
+
+    def replace_all(self, text: str) -> None:
+        """Put in words edited elsewhere (the score editor) as one step Ctrl+Z can take back.
+
+        ``setPlainText`` would clear the undo history and lose the old words for good.
+        """
+        cursor = self.text.textCursor()
+        cursor.select(QTextCursor.Document)
+        cursor.insertText(text)
+        self.text.setTextCursor(cursor)
 
     def insert_section(self, name: str) -> None:
         cursor = self.text.textCursor()
