@@ -31,7 +31,7 @@ def test_song_job_uses_profile(tmp_path, monkeypatch):
 def test_worker_versions_match_the_window():
     from app.jobs.worker_proc import EXPECTED_WORKER_VERSION, worker_version
 
-    for name in ("yue2", "sheetsage", "extract"):
+    for name in ("yue2", "sheetsage", "extract", "download"):
         assert worker_version(ROOT / "workers" / f"{name}_worker.py") == EXPECTED_WORKER_VERSION
 
 

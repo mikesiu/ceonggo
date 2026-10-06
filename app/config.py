@@ -25,6 +25,9 @@ DEFAULTS: dict[str, Any] = {
     "songs_dir": "songs",            # relative paths stay inside the portable folder
     # OpenUtau.exe, installed by the user (not part of Ceonggo). "" = not set.
     "openutau_exe": "",
+    # Tools → Download audio: the folder last saved to ("" = Downloads) and "flac" or "mp3".
+    "download_dir": "",
+    "download_format": "flac",
     "last_style": {},
     "last_lyrics": "",
     "last_cover_style": {},

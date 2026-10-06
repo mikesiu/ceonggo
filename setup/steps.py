@@ -276,7 +276,7 @@ class Installer:
                            "import torch, yue2, soundfile; print('yue2', torch.__version__, torch.cuda.is_available())"))
         if "sheetsage" in installed:
             checks.append((self.path("runtime/sheetsage/python.exe"),
-                           "import torch, transformers, pretty_midi, soundfile, onnxruntime; "
+                           "import torch, transformers, pretty_midi, soundfile, onnxruntime, yt_dlp; "
                            "print('sheetsage', torch.__version__, torch.cuda.is_available())"))
         for python, code in checks:
             out = self._run([str(python), "-c", code], t("A runtime failed its self-test"))

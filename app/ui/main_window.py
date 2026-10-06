@@ -27,6 +27,7 @@ from app.songs import Library, Song, copy_records
 from app.ui import theme
 from app.ui.cover_tab import CoverTab
 from app.ui.create_tab import CreateTab
+from app.ui.download_dialog import DownloadDialog
 from app.ui.extract_dialog import ExtractDialog
 from app.ui.library_tab import LibraryTab
 from app.ui.player_bar import PlayerBar
@@ -96,6 +97,7 @@ class MainWindow(QMainWindow):
         tools = QPushButton(t("Tools"))
         tools_menu = QMenu(tools)
         tools_menu.addAction(t("Extract Vocals from Audio…"), self.extract_vocals)
+        tools_menu.addAction(t("Download Audio from URL…"), self.download_audio)
         tools.setMenu(tools_menu)
         header.addWidget(tools, 0, Qt.AlignVCenter)
         settings = QPushButton(t("Settings"))
@@ -324,6 +326,20 @@ class MainWindow(QMainWindow):
                                                             files="\n".join(existing))) != QMessageBox.Yes:
             return
         ExtractDialog(self, source, vocals, instrumental).show()
+
+    def download_audio(self) -> None:
+        """Tools → Download Audio from URL…: a link's audio (YouTube and others) saved as FLAC or MP3.
+
+        yt-dlp lives in the Cover maker's runtime and converts with its FFmpeg; an
+        install from before this tool gets it from Settings → Repair.
+        """
+        if not (self.install.has("cover") and (paths.ffmpeg_bin() / "ffmpeg.exe").is_file()
+                and (paths.sheetsage_packages() / "yt_dlp").is_dir()):
+            QMessageBox.information(self, t("Download audio"),
+                                    t("Download audio needs the Cover maker with its downloader. "
+                                      "Open Settings → Repair / add components… to add it."))
+            return
+        DownloadDialog(self).show()
 
     def use_score(self, text: str, target: str, origin: str, lyrics: str | None = None) -> None:
         """Hand a score (and any lyrics edited with it) to the Create or Cover tab, and show that tab."""

@@ -100,6 +100,25 @@ def extract_job(*, audio, vocals, instrumental) -> dict:
     }
 
 
+def download_job(*, url: str, save_dir, work_dir, output_format: str = "flac") -> dict:
+    """Tools → Download audio: one link's audio as FLAC or MP3, into the user's own folder.
+
+    ``save_dir`` is not called output_dir on purpose: the Engine may empty a job's
+    output_dir before a retry, and this one is the user's Downloads. ``work_dir``
+    is a fresh folder under the cache that the worker deletes when it ends.
+    """
+    return {
+        "url": url, "save_dir": str(save_dir), "work_dir": str(work_dir), "output_format": output_format,
+        "filename_template": "%(title)s.%(ext)s", "ffmpeg": str(paths.ffmpeg_bin() / "ffmpeg.exe"),
+        "cache_dir": str(paths.cache_dir() / "yt-dlp"),
+    }
+
+
+def downloader_update_job() -> dict:
+    """Download audio's Update downloader: the newest yt-dlp from PyPI, installed with Ceonggo's uv."""
+    return {"update": True, "uv": str(paths.uv_exe()), "uv_cache": str(paths.cache_dir() / "uv")}
+
+
 #: Worker stage ids -> what a musician is told. Order is the order they happen.
 STAGES = [
     ("load", N("Warming up the band")),
@@ -140,6 +159,15 @@ EXTRACT_STAGES = [
 #: Separating is nearly all of it (about 7 s of a 3:12 song on a Radeon AI PRO R9700).
 EXTRACT_WEIGHT = {"load": 0.05, "read": 0.05, "separate": 0.8, "save": 0.1}
 
+#: "update" is Update downloader's only stage; a download skips it, and it skips the rest.
+DOWNLOAD_STAGES = [
+    ("connect", N("Connecting")),
+    ("download", N("Downloading the audio")),
+    ("convert", N("Converting the audio")),
+    ("update", N("Updating the downloader")),
+]
+DOWNLOAD_WEIGHT = {"connect": 0.1, "download": 0.75, "convert": 0.15, "update": 1.0}
+
 
 def friendly_error(event: dict) -> str:
     kind = event.get("kind", "unknown")
@@ -164,4 +192,18 @@ def friendly_error(event: dict) -> str:
                  "(keep runtime, models and songs).")
     if kind == "crashed":
         return t("The engine stopped unexpectedly. The details are in the log folder.")
+    # Download audio (workers/download_worker.py).
+    if kind == "bad_link":
+        return t("No audio was found at this link. Check it opens a single video or track.")
+    if kind == "unavailable":
+        return t("This video is private, removed, age-restricted or not available here.")
+    if kind == "site_changed":
+        return t("The site refused the download. It may have changed since this downloader was made, "
+                 "or be limiting downloads for now. Press Update downloader and try again, or try later.")
+    if kind == "network":
+        return t("The site could not be reached. Check the internet connection and try again.")
+    if kind == "playlist":
+        return t("This link is a playlist. Paste the link of one video from it.")
+    if kind == "live":
+        return t("This link is a live stream. Download it once the stream has ended.")
     return t("Something went wrong: {message}", message=message)

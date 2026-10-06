@@ -64,6 +64,9 @@ def portable_environment(extra_path: list[Path] | None = None) -> QProcessEnviro
         "TORCH_HOME": str(paths.cache_dir() / "torch"),
         "TRITON_CACHE_DIR": str(paths.cache_dir() / "triton"),
         "CUDA_CACHE_PATH": str(paths.cache_dir() / "cuda"),
+        # Deno solves YouTube's challenges for the download worker; its cache would be in %LOCALAPPDATA%.
+        "DENO_DIR": str(paths.cache_dir() / "deno"),
+        "DENO_NO_UPDATE_CHECK": "1",
         "TEMP": str(tmp),
         "TMP": str(tmp),
         "YUE2_KIT": str(root),
@@ -119,8 +122,9 @@ class WorkerProcess(QObject):
                 "message": f"{script} is version {found}, this Ceonggo needs version {EXPECTED_WORKER_VERSION}"}))
             return
         self.job_file.write_text(json.dumps(self.job, ensure_ascii=False, indent=1), encoding="utf-8")
-        # The remix and extract workers share SheetSage's runtime (onnxruntime lives there) and FFmpeg.
-        extra = [paths.ffmpeg_bin()] if self.worker in ("sheetsage", "remix", "extract") else None
+        # The remix, extract and download workers share SheetSage's runtime (onnxruntime and
+        # yt-dlp live there) and FFmpeg.
+        extra = [paths.ffmpeg_bin()] if self.worker in ("sheetsage", "remix", "extract", "download") else None
         self.proc.setProcessEnvironment(portable_environment(extra))
         self.proc.setWorkingDirectory(str(paths.root()))
         self.proc.setStandardInputFile(QProcess.nullDevice())

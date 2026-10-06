@@ -21,6 +21,15 @@ from app.jobs import requests as rq
 from app.ui import theme
 
 
+def size_text(n: float) -> str:
+    """A byte count as a download shows it: 812 B, 340.2 KB, 4.1 MB."""
+    for unit in ("B", "KB", "MB"):
+        if n < 1024:
+            return f"{n:.0f} {unit}" if unit == "B" else f"{n:.1f} {unit}"
+        n /= 1024
+    return f"{n:.2f} GB"
+
+
 class ProgressCard(QFrame):
     cancel_clicked = Signal()
 
@@ -132,6 +141,14 @@ class ProgressCard(QFrame):
         if unit == "tokens" and completed:
             rate = completed / max(0.1, event.get("elapsed") or 0.1)
             self.detail.setText(t("{n} notes · {rate}/s", n=f"{completed:,}", rate=f"{rate:.0f}"))
+        elif unit == "bytes":
+            parts = [f"{size_text(completed)} / {size_text(total)}" if total else size_text(completed)]
+            if event.get("speed"):
+                parts.append(f"{size_text(event['speed'])}/s")
+            if event.get("eta") is not None and total and completed < total:
+                eta = int(event["eta"])
+                parts.append(t("{time} left", time=f"{eta // 60}:{eta % 60:02d}"))
+            self.detail.setText(" · ".join(parts))
         elif total:
             self.detail.setText(f"{completed} / {total}")
         elif event.get("tokens"):

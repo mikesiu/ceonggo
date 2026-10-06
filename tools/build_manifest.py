@@ -60,12 +60,16 @@ ENVS = {
         # for reading the uploaded song, and onnxruntime for Replace vocal's
         # separator (workers/remix_worker.py). The DirectML build runs on NVIDIA
         # and AMD alike with no CUDA libraries of its own; onnxruntime-gpu 1.30
-        # wants CUDA 13, which neither torch here ships.
+        # wants CUDA 13, which neither torch here ships. yt-dlp is Tools →
+        # Download audio (workers/download_worker.py): "default" brings its EJS
+        # challenge scripts, "deno" the JavaScript runtime that runs them, as a
+        # wheel, so YouTube works with nothing installed system-wide.
         "requirements": [
             "torch==2.8.0", "torchaudio==2.8.0", "transformers==4.45.2",
             "huggingface-hub==0.36.0", "safetensors==0.5.3", "numpy==1.24.3",
             "scipy==1.13.1", "mir_eval==0.8.2", "pretty_midi==0.2.10", "mido==1.3.3",
             "setuptools==78.1.1", "soundfile==0.13.1", "onnxruntime-directml==1.24.4",
+            "yt-dlp[default,deno]==2026.8.19",
         ],
         "index": "https://download.pytorch.org/whl/cu128",   # cu128 also covers RTX 50-series (sm_120)
     },

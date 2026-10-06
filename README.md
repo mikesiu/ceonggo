@@ -138,6 +138,24 @@ is left of the mix, so the two add back up to the original. Progress shows in it
 can stay open while you keep working; Stop or closing it ends only this job. Existing files are
 replaced only after you agree. It needs the Cover maker, like Replace vocal.
 
+### Download audio
+
+**Tools ▾ → Download Audio from URL…** saves the audio of one link (YouTube, and the many other
+sites [yt-dlp](https://github.com/yt-dlp/yt-dlp) knows) as FLAC or MP3 in a folder you choose,
+ready for Extract vocals or the Cover tab. The best audio stream is converted with Ceonggo's own
+FFmpeg, so a YouTube download is usually a 48 kHz FLAC of its Opus track. Progress shows speed and
+time left; Stop or closing the window ends only this job and leaves no partial files. A file already
+in the folder is never replaced: the new one is saved as `<title> (2).flac`. Playlists and live
+streams are refused, with a message saying why.
+
+yt-dlp runs in the Cover maker's runtime, with Deno (installed as a Python wheel, no system install)
+to solve YouTube's JavaScript challenges. Which YouTube client to ask is left to yt-dlp: forcing
+`android`/`web` found no audio-only stream at all in October 2026. If YouTube refuses a fresh media
+link (HTTP 403), the download asks for new links once by itself. When downloads that used to work
+start failing, **Update downloader** installs the newest yt-dlp from PyPI into the runtime with
+Ceonggo's uv. A later Repair puts the pinned version back. Installs from before this tool get
+yt-dlp from Settings → Repair. Only download what you have the right to use.
+
 ### Settings
 
 Language, graphics-card mode, audio decoder, where OpenUtau is, and maintenance (repair, log
@@ -158,7 +176,8 @@ If a song still runs out of memory, Ceonggo retries it once in Lowest memory mod
 ```
 Ceonggo.exe / Ceonggo Setup.exe   PySide6 windows (no torch inside)
 runtime/yue2/                 standalone Python 3.12 + torch 2.10 cu128 + yue2-infer 0.1.6
-runtime/sheetsage/            standalone Python 3.11 + torch 2.8 cu128 (SheetSage2's pinned versions)
+runtime/sheetsage/            standalone Python 3.11 + torch 2.8 cu128 (SheetSage2's pinned versions),
+                              onnxruntime-directml, yt-dlp + Deno
 runtime/ffmpeg/, runtime/uv/  FFmpeg 6.1 shared, uv
 models/                       YuE2-3B, YuE2-Vae, SheetSage2, MERT-v2-FullSong (pinned commits)
 songs/                        one plain folder per song (audio.flac, score.abc, song.json …)
@@ -169,7 +188,7 @@ workers/                      the scripts the downloaded Pythons run
 
 - **Portable:** the runtimes carry no venvs, since a venv stores absolute paths. Packages install
   straight into the standalone Pythons. Every cache and temp folder (`HF_HOME`, `TORCH_HOME`,
-  `TEMP` …) points inside the folder, and nothing goes to `%APPDATA%` or the registry. Proven by
+  `DENO_DIR`, `TEMP` …) points inside the folder, and nothing goes to `%APPDATA%` or the registry. Proven by
   moving the runtime to another path and generating from there. (Developing in a venv is a separate
   matter and perfectly fine — see *Developing*.)
 - **Workers:** the window never imports torch. Each job is

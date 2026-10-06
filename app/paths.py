@@ -85,6 +85,15 @@ def ffmpeg_bin() -> Path:
     return runtime_dir() / "ffmpeg" / "bin"
 
 
+def sheetsage_packages() -> Path:
+    """The Cover maker runtime's libraries; Download audio looks for yt-dlp there."""
+    return runtime_dir() / "sheetsage" / "Lib" / "site-packages"
+
+
+def uv_exe() -> Path:
+    return runtime_dir() / "uv" / "uv.exe"
+
+
 def separator_model() -> Path:
     """The instrumental separator Replace vocal uses (Cover maker component)."""
     return models_dir() / "UVR-MDX-NET" / "UVR-MDX-NET-Inst_HQ_3.onnx"
