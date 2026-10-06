@@ -24,10 +24,11 @@ from __future__ import annotations
 
 import hashlib
 import html
+import time
 from fractions import Fraction
 from pathlib import Path
 
-from PySide6.QtCore import QPoint, QRect, QRectF, Qt, QThread, QTimer, QUrl, Signal
+from PySide6.QtCore import QPoint, QProcess, QRect, QRectF, Qt, QThread, QTimer, QUrl, Signal
 from PySide6.QtGui import QColor, QFont, QFontMetrics, QKeySequence, QPainter, QPen, QShortcut
 from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer
 from PySide6.QtWidgets import (
@@ -37,11 +38,12 @@ from PySide6.QtWidgets import (
 
 from app import cantonese, paths
 from app.i18n import N, plural, t
-from app.score import abc_dialect, preview, theory
+from app.score import abc_dialect, preview, theory, ustx
 from app.score.abc_write import WriteError, to_abc
 from app.score.lyrics import audition_lyrics, chunk_text, line_span, replace, replace_line
 from app.score.model import History, Note, Score, UnsupportedScore
 from app.score.timing import Clock
+from app.songs import slug
 from app.ui import theme
 from app.ui.widgets import heading
 
@@ -798,7 +800,8 @@ class ScoreEditor(QDialog):
     def __init__(self, text: str, *, title: str, actions: tuple[str, ...] = ("create", "cover"),
                  primary: str = "create", pause_player=None, audio_device: str = "",
                  latency_ms: int = 0, lyrics: str = "", style: str = "", song_audio: str = "",
-                 seed: int | None = None, audition=None, song_clock=None, parent=None):
+                 seed: int | None = None, audition=None, song_clock=None, openutau_exe: str = "",
+                 parent=None):
         super().__init__(parent)
         self.setWindowTitle(title)
         self.resize(1360, 860)
@@ -810,6 +813,8 @@ class ScoreEditor(QDialog):
         self._clock: Clock | None = None          # where the song really sings the score
         self._clock_failed = False
         self._waiting_to_hear: int | None = None  # a phrase asked for while the clock is found
+        self._waiting_export: str | None = None   # "file" / "openutau", asked for while the clock is found
+        self.openutau_exe = openutau_exe
         self._tries: dict[int, tuple[str, int]] = {}     # lyric line -> (clip, its offset in ms)
         self._singing = False
         self._closed = False
@@ -867,6 +872,14 @@ class ScoreEditor(QDialog):
         self.save_lyrics_btn.clicked.connect(self._save_lyrics)
         self.save_lyrics_btn.setVisible(bool(lyrics.strip()) and self.history is not None)
         top.addWidget(self.save_lyrics_btn)
+        openutau = QPushButton(t("OpenUtau ▾"))
+        openutau.setToolTip(t("Have a DiffSinger voicebank sing the vocal line in OpenUtau"))
+        openutau_menu = QMenu(openutau)
+        openutau_menu.addAction(t("Export .ustx…"), lambda: self._export_ustx("file"))
+        openutau_menu.addAction(t("Open in OpenUtau"), lambda: self._export_ustx("openutau"))
+        openutau.setMenu(openutau_menu)
+        openutau.setVisible(self.history is not None)
+        top.addWidget(openutau)
         layout.addLayout(top)
 
         # --- toolbar -----------------------------------------------------
@@ -1287,6 +1300,86 @@ class ScoreEditor(QDialog):
         self.dirty = False
         self.status.setText(t("Saved {path}", path=path))
 
+    # --- OpenUtau --------------------------------------------------------
+    def _export_ustx(self, target: str) -> None:
+        """Write the vocal line as an OpenUtau project: to a file, or straight into OpenUtau.
+
+        For a finished song the project runs on the song's own clock (the tempo
+        scaled by its slope), so what OpenUtau sings lines up with the song's band
+        when it comes back through Replace vocal. That clock is found first, once
+        per song, exactly as for Hear … in the song.
+        """
+        if self.score is None:
+            return
+        if target == "openutau" and not Path(self.openutau_exe).is_file():
+            QMessageBox.information(self, t("Open in OpenUtau"),
+                                    t("Ceonggo does not know where OpenUtau is. Choose OpenUtau.exe in "
+                                      "Settings, or use Export .ustx… and open the file in OpenUtau yourself."))
+            return
+        if self.song_audio and self._clock is None and self.song_clock and not self._clock_failed:
+            first = self._waiting_export is None and self._waiting_to_hear is None
+            self._waiting_export = target
+            if first:
+                self._audition_status(self._finding_text())
+                self.song_clock(self._clock_found, self._clock_missing)
+            return
+        name = self.windowTitle()
+        if target == "file":
+            path, _ = QFileDialog.getSaveFileName(self, t("Export .ustx"), str(Path.home() / f"{slug(name, 60)}.ustx"),
+                                                  t("OpenUtau project") + " (*.ustx)")
+            if not path:
+                return
+            if not path.lower().endswith(".ustx"):
+                path += ".ustx"
+        else:
+            folder = paths.cache_dir() / "openutau"
+            folder.mkdir(parents=True, exist_ok=True)
+            path = str(folder / f"{time.strftime('%Y%m%d-%H%M%S')}-{slug(name, 40)}.ustx")
+        try:
+            Path(path).write_text(self._ustx_text(name), encoding="utf-8")
+        except OSError as error:
+            QMessageBox.warning(self, t("Export .ustx"), t("The project could not be saved: {why}", why=error))
+            return
+        note = self._ustx_note()
+        if target == "openutau":
+            exe = Path(self.openutau_exe)
+            if not QProcess.startDetached(str(exe), [path], str(exe.parent))[0]:
+                QMessageBox.warning(self, t("Open in OpenUtau"),
+                                    t("OpenUtau could not be started: {path}", path=str(exe)))
+                return
+            self.status.setText(t("Opened in OpenUtau: {path}", path=path) + note)
+        else:
+            self.status.setText(t("Saved {path}", path=path) + note)
+
+    def _export_after_clock(self) -> None:
+        target, self._waiting_export = self._waiting_export, None
+        if target is not None and not self._closed:
+            if self._audition_note == self._finding_text():
+                self._audition_status("")
+            self._export_ustx(target)
+
+    def _ustx_text(self, name: str) -> str:
+        score = self.score
+        check = self.canvas.words() if self.canvas is not None and score.lyrics.strip() else None
+        clock = self._clock if self.song_audio else None
+        comment = (f"From Ceonggo, on the song's clock: audio = {clock.slope:.6f} x score {clock.shift:+.3f} s"
+                   if clock else "From Ceonggo, on the score's clock")
+        return ustx.to_ustx(score, name=name, check=check,
+                            cantonese=cantonese.is_cantonese(self.style) and cantonese.available(),
+                            tempo_scale=clock.slope if clock else 1.0, comment=comment)
+
+    def _ustx_note(self) -> str:
+        """What the user should know about what was written, appended to the status line."""
+        bits = []
+        if self.score.lyrics.strip() and self.canvas is not None:
+            missing = ustx.dropped(self.canvas.words())
+            if missing:
+                bits.append(t("Words left out, with no note of their own: {n}.", n=missing))
+        if self.song_audio and self._clock is None:
+            bits.append(t("The song's clock is unknown, so the project follows the score's; "
+                          "a new vocal may drift against this song's band."))
+        return ("  " + " ".join(bits)) if bits else ""
+
     # --- preview ---------------------------------------------------------
     def _toggle_play(self) -> None:
         if self.player.playbackState() == QMediaPlayer.PlayingState:
@@ -1519,6 +1612,7 @@ class ScoreEditor(QDialog):
             self._audition_status("")
         if chunk is not None:
             self._hear_in_song(chunk)
+        self._export_after_clock()
 
     def _clock_missing(self, message: str) -> None:
         self._clock_failed = True
@@ -1529,6 +1623,7 @@ class ScoreEditor(QDialog):
                                 "and may be a few seconds off: {why}", why=message))
         if chunk is not None:
             self._hear_in_song(chunk)
+        self._export_after_clock()
 
     def _sing_line(self, line: int) -> None:
         """Have YuE2 sing just this line, with the words and notes as they are now.

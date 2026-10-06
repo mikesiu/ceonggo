@@ -79,6 +79,27 @@ def transcribe_job(*, audio: str, output_dir, vocal_only: bool = False) -> dict:
     }
 
 
+def remix_job(*, song_audio, vocal, output_dir, vocal_offset: float = 0.0) -> dict:
+    """Replace vocal: the song's own band under a vocal sung elsewhere (OpenUtau).
+
+    ``vocal_offset`` is the song's clock shift: YuE2 sang off the score's clock,
+    the new vocal is on it (see app/score/timing.py).
+    """
+    return {
+        "song_audio": str(song_audio), "vocal": str(vocal), "output_dir": str(output_dir),
+        "vocal_offset": float(vocal_offset), "vocal_gain_db": 0.0,
+        "model": str(paths.separator_model()), "ffmpeg": str(paths.ffmpeg_bin() / "ffmpeg.exe"),
+    }
+
+
+def extract_job(*, audio, vocals, instrumental) -> dict:
+    """Tools → Extract vocals: any recording split into two files, its vocal and its instrumental."""
+    return {
+        "audio": str(audio), "vocals": str(vocals), "instrumental": str(instrumental),
+        "model": str(paths.separator_model()), "ffmpeg": str(paths.ffmpeg_bin() / "ffmpeg.exe"),
+    }
+
+
 #: Worker stage ids -> what a musician is told. Order is the order they happen.
 STAGES = [
     ("load", N("Warming up the band")),
@@ -100,6 +121,24 @@ TRANSCRIBE_STAGES = [
     ("transcribe_decoding", N("Writing down the melody")),
     ("transcribe_notation", N("Writing the score")),
 ]
+
+
+REMIX_STAGES = [
+    ("load", N("Loading the separator")),
+    ("separate", N("Extracting instrumental")),
+    ("mix", N("Mixing new vocals")),
+]
+#: Measured on a Radeon AI PRO R9700 for a 3:12 song: 0.7 s, 7 s, 9 s.
+REMIX_WEIGHT = {"load": 0.05, "separate": 0.45, "mix": 0.5}
+
+EXTRACT_STAGES = [
+    ("load", N("Loading the separator")),
+    ("read", N("Reading the recording")),
+    ("separate", N("Separating the vocals")),
+    ("save", N("Saving the vocals and instrumental")),
+]
+#: Separating is nearly all of it (about 7 s of a 3:12 song on a Radeon AI PRO R9700).
+EXTRACT_WEIGHT = {"load": 0.05, "read": 0.05, "separate": 0.8, "save": 0.1}
 
 
 def friendly_error(event: dict) -> str:

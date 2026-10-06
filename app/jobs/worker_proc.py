@@ -119,7 +119,8 @@ class WorkerProcess(QObject):
                 "message": f"{script} is version {found}, this Ceonggo needs version {EXPECTED_WORKER_VERSION}"}))
             return
         self.job_file.write_text(json.dumps(self.job, ensure_ascii=False, indent=1), encoding="utf-8")
-        extra = [paths.ffmpeg_bin()] if self.worker == "sheetsage" else None
+        # The remix and extract workers share SheetSage's runtime (onnxruntime lives there) and FFmpeg.
+        extra = [paths.ffmpeg_bin()] if self.worker in ("sheetsage", "remix", "extract") else None
         self.proc.setProcessEnvironment(portable_environment(extra))
         self.proc.setWorkingDirectory(str(paths.root()))
         self.proc.setStandardInputFile(QProcess.nullDevice())

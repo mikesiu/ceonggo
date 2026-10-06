@@ -77,7 +77,11 @@ def test_every_download_is_pinned():
             if item.kind != "model" or f["size"] > 10_000_000:
                 assert len(f["sha256"]) == 64, f
         if item.kind == "model":
-            assert "/resolve/" + item.data["revision"] + "/" in item.files[0]["url"]
+            for f in item.files:
+                if "huggingface.co" in f["url"]:
+                    assert "/resolve/" + item.data["revision"] + "/" in f["url"]
+                else:                  # a release file (the separator): no LFS oid, so hash it all
+                    assert len(f["sha256"]) == 64, f
 
 
 def test_pick_wheel_prefers_platform_wheels():

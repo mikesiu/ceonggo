@@ -73,6 +73,15 @@ class Engine(QObject):
         if self.process:
             self.process.cancel()
 
+    def cancel(self, job: Job) -> None:
+        """Stop one job and leave the others: dropped if it is queued, stopped if it is running."""
+        if any(queued is job for queued in self.queue):
+            self.queue = [queued for queued in self.queue if queued is not job]
+            if job.on_fail:
+                job.on_fail({"type": "error", "kind": "cancelled", "message": "Cancelled", "queued": True})
+        elif self.current is job and self.process:
+            self.process.cancel()
+
     def _next(self) -> None:
         if not self.queue:
             if self.current is not None:

@@ -465,6 +465,23 @@
    ]
   },
   {
+   "id": "model:UVR-MDX-NET",
+   "kind": "model",
+   "component": "cover",
+   "repo": "TRvlvr/model_repo",
+   "revision": "all_public_uvr_models",
+   "dest": "models/UVR-MDX-NET",
+   "size": 66759214,
+   "files": [
+    {
+     "path": "UVR-MDX-NET-Inst_HQ_3.onnx",
+     "size": 66759214,
+     "sha256": "317554b07fe1ea5279a77f2b1520a41ea4b93432560c4ffd08792c30fddf9adc",
+     "url": "https://github.com/TRvlvr/model_repo/releases/download/all_public_uvr_models/UVR-MDX-NET-Inst_HQ_3.onnx"
+    }
+   ]
+  },
+  {
    "id": "model:YuE2-Vae-legacy",
    "kind": "model",
    "component": "legacy",
@@ -1018,7 +1035,7 @@
    "component": "cover",
    "python": "runtime/sheetsage/python.exe",
    "lock": "setup/locks/pylock.sheetsage.toml",
-   "size": 3563274993,
+   "size": 3588864168,
    "wheels": [
     {
      "name": "certifi",
@@ -1055,6 +1072,12 @@
      "url": "https://files.pythonhosted.org/packages/cc/06/4f138f618dbea66803291274f228f01daf29f306fe8b96bc30dab765df75/filelock-3.32.6-py3-none-any.whl",
      "size": 100189,
      "sha256": "3f16ecd0117feae0dfc147e8c62eb5daeccd8bd800378c3ddf416de9b4feb6b1"
+    },
+    {
+     "name": "flatbuffers",
+     "url": "https://files.pythonhosted.org/packages/e8/2d/d2a548598be01649e2d46231d151a6c56d10b964d94043a335ae56ea2d92/flatbuffers-25.12.19-py2.py3-none-any.whl",
+     "size": 26661,
+     "sha256": "7634f50c427838bb021c2d66a3d1168e9d199b0607e6329399f04846d42e20b4"
     },
     {
      "name": "fsspec",
@@ -1123,6 +1146,12 @@
      "sha256": "5342cf6aad47943286afa6f1609cad9b4266a05e7f2ec408e2cf7aea7ff69d80"
     },
     {
+     "name": "onnxruntime-directml",
+     "url": "https://files.pythonhosted.org/packages/be/90/99566dc6398028e7691a5b12720fd85f757a0901818b84599d28abb3f085/onnxruntime_directml-1.24.4-cp311-cp311-win_amd64.whl",
+     "size": 25106000,
+     "sha256": "96642a787e5a6f33bf043521c0f06eb1eb663f6b830e5862a2026d03f9c90543"
+    },
+    {
      "name": "packaging",
      "url": "https://files.pythonhosted.org/packages/63/34/ba1c580383c9eada3711951fef0795c80b829a078d72188184bcab9dd527/packaging-26.3-py3-none-any.whl",
      "size": 129956,
@@ -1134,6 +1163,12 @@
      "size": 5592108,
      "sha256": "ea6e192f94044674e833336ea1f415318ddf28e320302ac7b109edff0d4534bd",
      "build": true
+    },
+    {
+     "name": "protobuf",
+     "url": "https://files.pythonhosted.org/packages/8a/55/b77bda4e5e5f5971fb51b07663694690e9afdb9402136c16a522bd621cad/protobuf-7.36.2-cp310-abi3-win_amd64.whl",
+     "size": 456514,
+     "sha256": "a300819d441e078a5608c0d3c709796bb548136058fda017ae51d425b44fd353"
     },
     {
      "name": "pycparser",
@@ -1247,7 +1282,7 @@
    "variant": "amd",
    "python": "runtime/sheetsage/python.exe",
    "rocm_build": "20260513",
-   "size": 1775432363,
+   "size": 1801021538,
    "wheels": [
     {
      "name": "certifi",
@@ -1284,6 +1319,12 @@
      "url": "https://files.pythonhosted.org/packages/cc/06/4f138f618dbea66803291274f228f01daf29f306fe8b96bc30dab765df75/filelock-3.32.6-py3-none-any.whl",
      "size": 100189,
      "sha256": "3f16ecd0117feae0dfc147e8c62eb5daeccd8bd800378c3ddf416de9b4feb6b1"
+    },
+    {
+     "name": "flatbuffers",
+     "url": "https://files.pythonhosted.org/packages/e8/2d/d2a548598be01649e2d46231d151a6c56d10b964d94043a335ae56ea2d92/flatbuffers-25.12.19-py2.py3-none-any.whl",
+     "size": 26661,
+     "sha256": "7634f50c427838bb021c2d66a3d1168e9d199b0607e6329399f04846d42e20b4"
     },
     {
      "name": "fsspec",
@@ -1352,6 +1393,12 @@
      "sha256": "5342cf6aad47943286afa6f1609cad9b4266a05e7f2ec408e2cf7aea7ff69d80"
     },
     {
+     "name": "onnxruntime-directml",
+     "url": "https://files.pythonhosted.org/packages/be/90/99566dc6398028e7691a5b12720fd85f757a0901818b84599d28abb3f085/onnxruntime_directml-1.24.4-cp311-cp311-win_amd64.whl",
+     "size": 25106000,
+     "sha256": "96642a787e5a6f33bf043521c0f06eb1eb663f6b830e5862a2026d03f9c90543"
+    },
+    {
      "name": "packaging",
      "url": "https://files.pythonhosted.org/packages/63/34/ba1c580383c9eada3711951fef0795c80b829a078d72188184bcab9dd527/packaging-26.3-py3-none-any.whl",
      "size": 129956,
@@ -1363,6 +1410,12 @@
      "size": 5592108,
      "sha256": "ea6e192f94044674e833336ea1f415318ddf28e320302ac7b109edff0d4534bd",
      "build": true
+    },
+    {
+     "name": "protobuf",
+     "url": "https://files.pythonhosted.org/packages/8a/55/b77bda4e5e5f5971fb51b07663694690e9afdb9402136c16a522bd621cad/protobuf-7.36.2-cp310-abi3-win_amd64.whl",
+     "size": 456514,
+     "sha256": "a300819d441e078a5608c0d3c709796bb548136058fda017ae51d425b44fd353"
     },
     {
      "name": "pycparser",

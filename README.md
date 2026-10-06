@@ -95,6 +95,14 @@ Opens from a song card's **Score** button, from **See / edit the score** on the 
 - **Use it** — **Make a song with this score** (Create) or **Make a cover with this score**
   (Cover), plus **Open .abc…** / **Save as .abc…** and an **ABC text** view for hand editing.
   **Save lyrics…** keeps the words as a text file, edits included: an .abc has no place for them.
+- **OpenUtau ▾** — **Export .ustx…** or **Open in OpenUtau** (set OpenUtau.exe in Settings) writes
+  the vocal line as an OpenUtau project for a DiffSinger voicebank to sing. The words are the Words
+  lane's: one syllable per note, `+` where a note holds the syllable before. A Cantonese song gets
+  toneless Jyutping (`gam`, not `gam1`), with any reading you picked. OpenUtau's DiffSinger Jyutping
+  phonemizer looks syllables up without tones, and the melody carries the tone. Opened from a
+  library song, the project runs on that song's own clock (its tempo scaled to where YuE2 really
+  sang), so a vocal rendered from it lines up with the song's band under **Replace vocal**. Choose
+  the singer in OpenUtau.
 
 Every score the editor sends is written in YuE2's own ABC dialect, read back and compared with what
 you edited; if anything differs it refuses rather than sending something else. The parser is
@@ -108,9 +116,32 @@ score it was sung from, and for covers the original recording. Press Create or M
 version, or tick **Keep this seed** to reproduce the same one. It works on older songs too, because
 the settings are read from the `job.json` saved with every run.
 
+### Replace vocal
+
+⋯ → **Replace vocal - import a tuned vocal (.wav)…** on a song card keeps that song's band and puts
+your vocal over it, as a new song beside the original (which is never changed). The vocal is taken
+out with UVR's MDX-Net *Inst HQ 3* separator, run directly with ONNX Runtime on DirectML (NVIDIA or
+AMD, about 7 s for a three-minute song on a Radeon AI PRO R9700). The new vocal is shifted by the song's
+clock and mixed with FFmpeg to −14 LUFS: one pass measures the loudness, a second applies one
+linear gain. The instrumental is kept beside the result as `instrumental.flac`. It needs the Cover
+maker; older installs get the separator from Settings → Repair.
+
+The usual round trip: open the song's **Score**, **OpenUtau ▾ → Open in OpenUtau**, pick a
+Cantonese DiffSinger singer, tune, export the vocal as WAV, then **Replace vocal** on the same song.
+
+### Extract vocals
+
+**Tools ▾ → Extract Vocals from Audio…** splits any MP3, WAV or FLAC, not only a Ceonggo song, into
+`<name> (Vocals).flac` and `<name> (Instrumental).flac` (24-bit, 44.1 kHz) in a folder you choose.
+It is the same separator as Replace vocal: the model gives the instrumental, and the vocal is what
+is left of the mix, so the two add back up to the original. Progress shows in its own window, which
+can stay open while you keep working; Stop or closing it ends only this job. Existing files are
+replaced only after you agree. It needs the Cover maker, like Replace vocal.
+
 ### Settings
 
-Language, graphics-card mode, audio decoder, and maintenance (repair, log folder, clear cache).
+Language, graphics-card mode, audio decoder, where OpenUtau is, and maintenance (repair, log
+folder, clear cache).
 
 **Graphics-card modes** decide what is traded for memory, never quality:
 
@@ -243,4 +274,6 @@ YuE2's code is Apache-2.0, and `app/score/abc_dialect.py` is adapted from its `a
 (notice and licence in `licences/`, shipped with the release). The score editor's Jyutping comes
 from [ToJyutping](https://github.com/CanCLID/ToJyutping) (BSD-2, notice in `licences/`). The YuE2, SheetSage2 and MERT model
 weights are **CC BY-NC 4.0** (non-commercial), which Setup makes users acknowledge before
-downloading.
+downloading. Replace vocal's separator, `UVR-MDX-NET-Inst_HQ_3.onnx`, comes from the
+[Ultimate Vocal Remover](https://github.com/Anjok07/ultimatevocalremovergui) project's public model
+release. OpenUtau is not part of Ceonggo; it only reads the files Ceonggo writes.

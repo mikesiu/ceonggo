@@ -43,6 +43,11 @@ sdist = { url = "https://files.pythonhosted.org/packages/38/46/126b1831dca12060d
 wheels = [{ url = "https://files.pythonhosted.org/packages/cc/06/4f138f618dbea66803291274f228f01daf29f306fe8b96bc30dab765df75/filelock-3.32.6-py3-none-any.whl", upload-time = 2026-09-08T22:57:10Z, size = 100189, hashes = { sha256 = "3f16ecd0117feae0dfc147e8c62eb5daeccd8bd800378c3ddf416de9b4feb6b1" } }]
 
 [[packages]]
+name = "flatbuffers"
+version = "25.12.19"
+wheels = [{ url = "https://files.pythonhosted.org/packages/e8/2d/d2a548598be01649e2d46231d151a6c56d10b964d94043a335ae56ea2d92/flatbuffers-25.12.19-py2.py3-none-any.whl", upload-time = 2025-12-19T23:16:13Z, size = 26661, hashes = { sha256 = "7634f50c427838bb021c2d66a3d1168e9d199b0607e6329399f04846d42e20b4" } }]
+
+[[packages]]
 name = "fsspec"
 version = "2026.7.0"
 sdist = { url = "https://files.pythonhosted.org/packages/00/78/f34251dadb8f3921264a1d9b8946f5e542014ee2614b285261b4e40e6775/fsspec-2026.7.0.tar.gz", hashes = { sha256 = "c803c40f4cf860b49dea58ee3e1c33cb9c790520e233537e1340049f89b82a88" } }
@@ -70,12 +75,12 @@ wheels = [{ url = "https://files.pythonhosted.org/packages/57/b0/0e52c878c53f245
 [[packages]]
 name = "jinja2"
 version = "3.1.6"
-wheels = [{ url = "https://download.pytorch.org/whl/jinja2-3.1.6-py3-none-any.whl", upload-time = 2025-10-14T18:38:59Z, hashes = {} }]
+wheels = [{ url = "https://download.pytorch.org/whl/jinja2-3.1.6-py3-none-any.whl", upload-time = 2025-10-14T18:38:59Z, hashes = { sha256 = "85ece4451f492d0c13c5dd7c13a64681a86afae63a5f347908daf103ce6d2f67" } }]
 
 [[packages]]
 name = "markupsafe"
 version = "3.0.3"
-wheels = [{ url = "https://download.pytorch.org/whl/markupsafe-3.0.3-cp311-cp311-win_amd64.whl", upload-time = 2026-03-27T13:54:31Z, hashes = {} }]
+wheels = [{ url = "https://download.pytorch.org/whl/markupsafe-3.0.3-cp311-cp311-win_amd64.whl", upload-time = 2026-03-27T13:54:31Z, hashes = { sha256 = "de8a88e63464af587c950061a5e6a67d3632e36df62b986892331d4620a35c01" } }]
 
 [[packages]]
 name = "mido"
@@ -108,6 +113,11 @@ sdist = { url = "https://files.pythonhosted.org/packages/2c/d4/590ae7df5044465cc
 wheels = [{ url = "https://files.pythonhosted.org/packages/f0/e8/1ea9adebdccaadfc208c7517e09f5145ed5a73069779ff436393085d47a2/numpy-1.24.3-cp311-cp311-win_amd64.whl", hashes = { sha256 = "5342cf6aad47943286afa6f1609cad9b4266a05e7f2ec408e2cf7aea7ff69d80" } }]
 
 [[packages]]
+name = "onnxruntime-directml"
+version = "1.24.4"
+wheels = [{ url = "https://files.pythonhosted.org/packages/be/90/99566dc6398028e7691a5b12720fd85f757a0901818b84599d28abb3f085/onnxruntime_directml-1.24.4-cp311-cp311-win_amd64.whl", upload-time = 2026-03-17T21:47:15Z, size = 25106000, hashes = { sha256 = "96642a787e5a6f33bf043521c0f06eb1eb663f6b830e5862a2026d03f9c90543" } }]
+
+[[packages]]
 name = "packaging"
 version = "26.3"
 sdist = { url = "https://files.pythonhosted.org/packages/7d/fa/3944b40b07da9ce895c0e6303a5ab7d53da063554f534556b134a54d6093/packaging-26.3.tar.gz", upload-time = 2026-08-04T18:15:28Z, size = 313412, hashes = { sha256 = "94edc256424af38762eb31306eed28beb9f0efc50a8837492c9d6fd6004aed79" } }
@@ -117,6 +127,15 @@ wheels = [{ url = "https://files.pythonhosted.org/packages/63/34/ba1c580383c9ead
 name = "pretty-midi"
 version = "0.2.10"
 sdist = { url = "https://files.pythonhosted.org/packages/c2/81/f3e47efdf65eab347d1b78e8279222f6e3122d722cc9d68d443503a3c0e7/pretty_midi-0.2.10.tar.gz", upload-time = 2023-03-03T18:34:14Z, size = 5592108, hashes = { sha256 = "ea6e192f94044674e833336ea1f415318ddf28e320302ac7b109edff0d4534bd" } }
+
+[[packages]]
+name = "protobuf"
+version = "7.36.2"
+sdist = { url = "https://files.pythonhosted.org/packages/d9/89/5b8517baa72f84a67b8a307ba953c91057af618bf40bf676f3c03551f8f0/protobuf-7.36.2.tar.gz", upload-time = 2026-09-17T20:07:59Z, size = 512737, hashes = { sha256 = "497d0463ff3316681da6c0b9e8d06cb465d61abce00b613ab42226175644d1bb" } }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/8a/55/b77bda4e5e5f5971fb51b07663694690e9afdb9402136c16a522bd621cad/protobuf-7.36.2-cp310-abi3-win_amd64.whl", upload-time = 2026-09-17T20:07:57Z, size = 456514, hashes = { sha256 = "a300819d441e078a5608c0d3c709796bb548136058fda017ae51d425b44fd353" } },
+    { url = "https://files.pythonhosted.org/packages/e4/04/d52c7016b04b6c5108f26691f9d33ec82a9b65d041f1a9c771137693d618/protobuf-7.36.2-py3-none-any.whl", upload-time = 2026-09-17T20:07:58Z, size = 179806, hashes = { sha256 = "bdb3a345d48db958e6ce1f18e508beb0cc981d64f24088427549c866cd039f1e" } },
+]
 
 [[packages]]
 name = "pycparser"

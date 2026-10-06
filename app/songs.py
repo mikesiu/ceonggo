@@ -189,6 +189,17 @@ class Library:
         return target
 
 
+#: What a song made from another one's band (Replace vocal) carries over: its score,
+#: what it was made with (for ↻), and where its singing sits on the score's clock.
+RECORDS = ("score.abc", Song.INPUT_SCORE, "job.json", "clock.json")
+
+
+def copy_records(source: Song, target: Song) -> None:
+    for name in RECORDS:
+        if (source.folder / name).is_file():
+            shutil.copyfile(source.folder / name, target.folder / name)
+
+
 def export(song: Song, target: Path) -> Path:
     """Copy the FLAC, or convert with the bundled FFmpeg for WAV / MP3."""
     target = Path(target)

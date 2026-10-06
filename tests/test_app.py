@@ -31,7 +31,7 @@ def test_song_job_uses_profile(tmp_path, monkeypatch):
 def test_worker_versions_match_the_window():
     from app.jobs.worker_proc import EXPECTED_WORKER_VERSION, worker_version
 
-    for name in ("yue2", "sheetsage"):
+    for name in ("yue2", "sheetsage", "extract"):
         assert worker_version(ROOT / "workers" / f"{name}_worker.py") == EXPECTED_WORKER_VERSION
 
 
@@ -169,6 +169,33 @@ def test_catalogue_covers_every_string():
         if english.startswith("_"):
             continue
         assert set(re.findall(r"{\w+}", english)) == set(re.findall(r"{\w+}", chinese)), english
+
+
+def test_extract_job_names_both_stems(tmp_path, monkeypatch):
+    monkeypatch.setenv("CEONGGO_ROOT", str(tmp_path))
+    job = rq.extract_job(audio=tmp_path / "song.mp3", vocals=tmp_path / "out" / "song (Vocals).flac",
+                         instrumental=tmp_path / "out" / "song (Instrumental).flac")
+    assert job["vocals"].endswith("song (Vocals).flac") and job["instrumental"].endswith("song (Instrumental).flac")
+    assert job["model"].endswith("UVR-MDX-NET-Inst_HQ_3.onnx") and job["ffmpeg"].endswith("ffmpeg.exe")
+    assert {sid for sid, _ in rq.EXTRACT_STAGES} == set(rq.EXTRACT_WEIGHT)
+
+
+def test_cancelling_one_job_leaves_the_others():
+    """Stop in the Extract vocals dialog must not take a song queued in a tab with it,
+    even one whose fields are all equal (dataclasses compare by value)."""
+    from app.jobs.engine import Engine, Job
+
+    engine = Engine()
+    failed = []
+    running = Job("yue2", {"seed": 1}, on_fail=failed.append)
+    first, second = Job("extract", {}, on_fail=failed.append), Job("extract", {}, on_fail=failed.append)
+    assert first == second
+    engine.current, engine.queue = running, [first, second]
+
+    engine.cancel(second)
+    assert len(engine.queue) == 1 and engine.queue[0] is first
+    assert [event["kind"] for event in failed] == ["cancelled"]
+    assert engine.current is running                       # the running song is left alone
 
 
 def test_i18n_falls_back_to_english():

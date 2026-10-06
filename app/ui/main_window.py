@@ -4,13 +4,14 @@ from __future__ import annotations
 import json
 import shutil
 import time
+from datetime import datetime
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
-    QHBoxLayout, QLabel, QMainWindow, QMessageBox, QPushButton, QStackedWidget, QTabBar, QVBoxLayout,
-    QWidget,
+    QFileDialog, QHBoxLayout, QLabel, QMainWindow, QMenu, QMessageBox, QPushButton, QStackedWidget, QTabBar,
+    QVBoxLayout, QWidget,
 )
 
 from app import gpu, paths
@@ -22,10 +23,11 @@ from app.jobs.engine import Engine, Job
 from app.score import abc_dialect
 from app.score.model import Score
 from app.score.timing import Clock, fit_clock
-from app.songs import Library, Song
+from app.songs import Library, Song, copy_records
 from app.ui import theme
 from app.ui.cover_tab import CoverTab
 from app.ui.create_tab import CreateTab
+from app.ui.extract_dialog import ExtractDialog
 from app.ui.library_tab import LibraryTab
 from app.ui.player_bar import PlayerBar
 from app.ui.settings_dialog import SettingsDialog
@@ -91,6 +93,11 @@ class MainWindow(QMainWindow):
         self.status.setMinimumWidth(96)
         self.status.setAlignment(Qt.AlignCenter)
         header.addWidget(self.status, 0, Qt.AlignVCenter)
+        tools = QPushButton(t("Tools"))
+        tools_menu = QMenu(tools)
+        tools_menu.addAction(t("Extract Vocals from Audio…"), self.extract_vocals)
+        tools.setMenu(tools_menu)
+        header.addWidget(tools, 0, Qt.AlignVCenter)
         settings = QPushButton(t("Settings"))
         settings.clicked.connect(self._settings)
         header.addWidget(settings, 0, Qt.AlignVCenter)
@@ -114,6 +121,7 @@ class MainWindow(QMainWindow):
         card.open_score.connect(self.show_score)
         card.use_score.connect(self._use_song_score)
         card.reuse.connect(self._reuse)
+        card.replace_vocal.connect(self.replace_vocal)
         card.delete.connect(self._delete)
         return card
 
@@ -142,7 +150,8 @@ class MainWindow(QMainWindow):
                              audio_device=self.cfg.get("audio_device", ""),
                              latency_ms=self.player.latency_ms if override is None else int(override),
                              lyrics=lyrics, style=style, song_audio=song_audio, seed=seed,
-                             audition=audition, song_clock=song_clock, parent=self)
+                             audition=audition, song_clock=song_clock,
+                             openutau_exe=self.cfg.get("openutau_exe", ""), parent=self)
 
         def chosen(action: str, abc: str) -> None:
             words = dialog.edited_lyrics()
@@ -218,6 +227,103 @@ class MainWindow(QMainWindow):
         self.engine.submit(Job("sheetsage", rq.transcribe_job(audio=song.audio, output_dir=folder), on_done=done,
                                on_fail=lambda event: on_fail(rq.friendly_error(event))))
         return False
+
+    def replace_vocal(self, song: Song) -> None:
+        """Keep a song's band and put a vocal sung elsewhere (OpenUtau) over it, as a new song.
+
+        The original is never touched. The vocal is expected on the song's clock -
+        the editor's OpenUtau export puts it there - so the song's clock shift
+        places it, found first if this song has none yet.
+        """
+        title = t("Replace vocal")
+        if not song.has_audio:
+            return
+        if not self._separator_ready():
+            QMessageBox.information(self, title, t("Replace vocal needs the Cover maker with its vocal separator. "
+                                                   "Open Settings → Repair / add components… to add it."))
+            return
+        vocal, _ = QFileDialog.getOpenFileName(self, t("Import tuned vocal"), str(Path.home()),
+                                               t("Audio") + " (*.wav *.flac *.mp3)")
+        if not vocal:
+            return
+        progress = self.library_tab.progress
+        self.show_tab(self.library_tab)
+        known = (song.folder / self.CLOCK_FILE).is_file()
+        progress.start(t("Waiting for the engine…") if known
+                       else t("Finding where the song sings each line - about half a minute, once per song…"))
+
+        def separate(clock: Clock | None, note: str = "") -> None:
+            folder = self.library.new_folder(song.title, "-new-vocal")
+            data = rq.remix_job(song_audio=song.audio, vocal=vocal, output_dir=folder,
+                                vocal_offset=clock.shift if clock else 0.0)
+            self.engine.submit(Job(
+                "remix", data,
+                on_start=lambda: progress.start(t("Replacing the vocal of “{title}”", title=song.title)),
+                on_stage=progress.on_stage,
+                on_done=lambda event: self._vocal_replaced(song, folder, vocal, clock, note),
+                on_fail=lambda event: self._vocal_failed(folder, event)))
+
+        def no_clock(message: str) -> None:
+            if not progress.cancel.isEnabled():        # Stop was pressed while the clock was being found
+                progress.fail(t("Stopped"))
+                return
+            separate(None, t("The song's clock could not be found ({why}), so the vocal starts with the song "
+                             "and may be a few seconds off.", why=message))
+
+        self.song_clock(song, separate, no_clock)
+
+    def _vocal_replaced(self, original: Song, folder: Path, vocal: str, clock: Clock | None, note: str) -> None:
+        song = Song(folder, title=f"{original.title} · {t('new vocal')}", kind=original.kind, style=original.style,
+                    lyrics=original.lyrics, seed=original.seed, cot=original.cot,
+                    source_audio=original.source_audio, parent=original.folder.name)
+        song.extra.update({key: value for key, value in original.extra.items() if key in ("style_builder", "source_path")})
+        song.extra["new_vocal"] = Path(vocal).name
+        song.created = datetime.now().isoformat(timespec="seconds")
+        # The band, and so the clock, is the original's: Score and ↻ keep working.
+        copy_records(original, song)
+        song.save()
+        song = Song.load(folder) or song
+        self.library_tab.progress.finish(t("Done - {title}", title=song.title))
+        if note:
+            self.show_error(t("Replace vocal"), note, {})
+        self.library_changed()
+        self.player.load(song)
+
+    def _vocal_failed(self, folder: Path, event: dict) -> None:
+        self.discard_folder(folder)
+        if event.get("kind") == "cancelled":
+            self.library_tab.progress.fail(t("Stopped"))
+            return
+        self.library_tab.progress.fail(t("Could not replace the vocal"))
+        self.show_error(t("Replace vocal"), rq.friendly_error(event), event)
+
+    def _separator_ready(self) -> bool:
+        """Replace vocal and Extract vocals both need the Cover maker's separator and FFmpeg."""
+        return (self.install.has("cover") and paths.separator_model().is_file()
+                and (paths.ffmpeg_bin() / "ffmpeg.exe").is_file())
+
+    def extract_vocals(self) -> None:
+        """Tools → Extract Vocals from Audio…: any recording split into a vocal and an instrumental file."""
+        title = t("Extract vocals")
+        if not self._separator_ready():
+            QMessageBox.information(self, title, t("Extract vocals needs the Cover maker with its vocal separator. "
+                                                   "Open Settings → Repair / add components… to add it."))
+            return
+        source, _ = QFileDialog.getOpenFileName(self, t("Choose a recording"), str(Path.home()),
+                                                t("Audio") + " (*.mp3 *.wav *.flac)")
+        if not source:
+            return
+        source = Path(source)
+        folder = QFileDialog.getExistingDirectory(self, t("Save the vocals and instrumental in"), str(source.parent))
+        if not folder:
+            return
+        vocals = Path(folder) / f"{source.stem} (Vocals).flac"
+        instrumental = Path(folder) / f"{source.stem} (Instrumental).flac"
+        existing = [path.name for path in (vocals, instrumental) if path.exists()]
+        if existing and QMessageBox.question(self, title, t("Replace these files?\n{files}",
+                                                            files="\n".join(existing))) != QMessageBox.Yes:
+            return
+        ExtractDialog(self, source, vocals, instrumental).show()
 
     def use_score(self, text: str, target: str, origin: str, lyrics: str | None = None) -> None:
         """Hand a score (and any lyrics edited with it) to the Create or Cover tab, and show that tab."""

@@ -85,6 +85,11 @@ def ffmpeg_bin() -> Path:
     return runtime_dir() / "ffmpeg" / "bin"
 
 
+def separator_model() -> Path:
+    """The instrumental separator Replace vocal uses (Cover maker component)."""
+    return models_dir() / "UVR-MDX-NET" / "UVR-MDX-NET-Inst_HQ_3.onnx"
+
+
 def workers_dir() -> Path:
     return resource_dir() / "workers"
 

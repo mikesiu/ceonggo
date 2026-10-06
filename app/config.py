@@ -23,6 +23,8 @@ DEFAULTS: dict[str, Any] = {
     # None = measure the output device; a number overrides it (see ScoreEditor).
     "playback_latency_ms": None,
     "songs_dir": "songs",            # relative paths stay inside the portable folder
+    # OpenUtau.exe, installed by the user (not part of Ceonggo). "" = not set.
+    "openutau_exe": "",
     "last_style": {},
     "last_lyrics": "",
     "last_cover_style": {},
