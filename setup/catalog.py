@@ -6,7 +6,8 @@ Setup run today fetches exactly the bytes the release was tested with.
 
 Four kinds of item:
 
-* ``model``   - a HuggingFace repository at a fixed commit, as a list of files.
+* ``model``   - a HuggingFace repository at a fixed commit, as a list of files
+  (or, for the vocal separator, one file from a fixed GitHub release).
 * ``archive`` - a zip or tar.gz unpacked into a folder (uv, Python, FFmpeg).
 * ``wheels``  - one Python environment: wheels downloaded one by one, then
   installed offline into that environment's standalone Python.

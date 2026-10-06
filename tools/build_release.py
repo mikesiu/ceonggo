@@ -51,7 +51,8 @@ LICENCES
   The YuE2, SheetSage2 and MERT model weights are licensed CC BY-NC 4.0
   (non-commercial use only); their licence files are in models\\<name>\\ after
   Setup has run. The YuE2 code is Apache-2.0. Ceonggo's score reader is adapted
-  from YuE2's abc_tools.py; see licences\\.
+  from YuE2's abc_tools.py, and the Jyutping readings come from ToJyutping
+  (BSD-2); see licences\\.
 """
 
 

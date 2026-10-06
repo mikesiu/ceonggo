@@ -4,8 +4,10 @@ Run by the maintainer, never on a user's machine:
 
     python tools/build_manifest.py
 
-Needs Python 3.11+ (tomllib), network access, and ``uv`` on PATH or in
-``spike/uv``. What it does:
+Needs Python 3.11+ (tomllib), network access, and ``uv`` on PATH, in
+``spike/uv`` or in ``runtime/uv``. ``--sheetsage`` refreshes only the Cover
+maker's environment and the vocal separator; ``--rocm`` only the AMD twins.
+What a full run does:
 
 1. Resolves both Python environments with ``uv pip compile`` for Windows x64 and
    writes the lock files to setup/locks/ (kept in the repo for review).
@@ -55,12 +57,19 @@ ENVS = {
     "sheetsage": {
         "python": PY_SHEETSAGE,
         # Pinned exactly as m-a-p/SheetSage2 requirements.txt, plus soundfile
-        # for reading the uploaded song.
+        # for reading the uploaded song, and onnxruntime for Replace vocal's
+        # separator (workers/remix_worker.py). The DirectML build runs on NVIDIA
+        # and AMD alike with no CUDA libraries of its own; onnxruntime-gpu 1.30
+        # wants CUDA 13, which neither torch here ships. yt-dlp is Tools →
+        # Download audio (workers/download_worker.py): "default" brings its EJS
+        # challenge scripts, "deno" the JavaScript runtime that runs them, as a
+        # wheel, so YouTube works with nothing installed system-wide.
         "requirements": [
             "torch==2.8.0", "torchaudio==2.8.0", "transformers==4.45.2",
             "huggingface-hub==0.36.0", "safetensors==0.5.3", "numpy==1.24.3",
             "scipy==1.13.1", "mir_eval==0.8.2", "pretty_midi==0.2.10", "mido==1.3.3",
-            "setuptools==78.1.1", "soundfile==0.13.1",
+            "setuptools==78.1.1", "soundfile==0.13.1", "onnxruntime-directml==1.24.4",
+            "yt-dlp[default,deno]==2026.8.19",
         ],
         "index": "https://download.pytorch.org/whl/cu128",   # cu128 also covers RTX 50-series (sm_120)
     },
@@ -88,6 +97,12 @@ MODELS = {
     "MERT-v2-FullSong": "cover",
     "YuE2-Vae-legacy": "legacy",
 }
+#: The instrumental separator Replace vocal uses: one ONNX file from UVR's public
+#: model release, not a HuggingFace repo. Its STFT settings (n_fft 6144, dim_f
+#: 3072, compensate 1.022) live in workers/remix_worker.py.
+SEPARATOR = ("https://github.com/TRvlvr/model_repo/releases/download/all_public_uvr_models/"
+             "UVR-MDX-NET-Inst_HQ_3.onnx")
+
 #: Files in the model repos Ceonggo never needs.
 MODEL_SKIP_PREFIXES = ("assets/", "render_assets/", "examples/", "benchmarks/")
 MODEL_SKIP_SUFFIXES = (".whl", ".md", ".png", ".jpg", ".gif", ".pdf")
@@ -96,6 +111,8 @@ MODEL_KEEP = {"README.md", "LICENSE", "THIRD_PARTY_NOTICES.md"}
 
 def uv() -> str:
     found = shutil.which("uv") or str(ROOT / "spike" / "uv" / "uv.exe")
+    if not Path(found).exists():
+        found = str(ROOT / "runtime" / "uv" / "uv.exe")      # the copy Ceonggo Setup installed
     if not Path(found).exists():
         sys.exit("uv not found: install it or put uv.exe in spike/uv/")
     return found
@@ -127,7 +144,10 @@ def archive(item_id: str, url: str, dest: str, strip: str | None, component: str
             "size": size, "sha256": sha, "dest": dest, "strip": strip}
 
 
-def compile_env(name: str, spec: dict) -> dict:
+def compile_env(name: str, spec: dict, known: dict[str, tuple[int, str]] | None = None) -> dict:
+    """``known`` maps wheel URLs to (size, sha256) already pinned, so wheels the
+    index publishes no metadata for (torch: 3.4 GB) are not downloaded again."""
+    known = known or {}
     LOCKS.mkdir(parents=True, exist_ok=True)
     lock = LOCKS / f"pylock.{name}.toml"
     with tempfile.TemporaryDirectory() as tmp:
@@ -164,6 +184,8 @@ def compile_env(name: str, spec: dict) -> dict:
         size, sha = chosen.get("size"), chosen.get("hashes", {}).get("sha256")
         if not sha and "#sha256=" in chosen["url"]:
             sha = chosen["url"].split("#sha256=", 1)[1]
+        if (not size or not sha) and url in known:
+            size, sha = known[url]
         if not size or not sha:
             # The PyTorch index mirrors some small wheels without metadata.
             size, sha = hash_remote(url)
@@ -286,7 +308,52 @@ def model(repo: str, component: str) -> dict:
             "files": files}
 
 
+def separator_model() -> dict:
+    name = SEPARATOR.rsplit("/", 1)[-1]
+    size, sha = hash_remote(SEPARATOR)
+    return {"id": "model:UVR-MDX-NET", "kind": "model", "component": "cover", "repo": "TRvlvr/model_repo",
+            "revision": "all_public_uvr_models", "dest": "models/UVR-MDX-NET", "size": size,
+            "files": [{"path": name, "size": size, "sha256": sha, "url": SEPARATOR}]}
+
+
+def refresh_sheetsage(catalog: dict) -> dict:
+    """Re-resolve the SheetSage environment and (re)add the separator model.
+
+    The AMD twin keeps the ROCm torch wheels it already has: AMD prunes old
+    nightlies, so re-picking them could fail or move torch for no reason. uv
+    keeps every version already in the lock unless the new requirement forces it.
+    """
+    items = catalog["items"]
+    old_rocm = next(i for i in items if i["id"] == "env:sheetsage-rocm")
+    old_cuda = next(i for i in items if i["id"] == "env:sheetsage")
+    cuda = compile_env("sheetsage", ENVS["sheetsage"],
+                       {w["url"]: (w["size"], w["sha256"]) for w in old_cuda["wheels"]})
+    cuda["variant"] = "nvidia"
+    swapped = {p.replace("-", "_").lower() for p in [*ROCM_TORCH["sheetsage"], *ROCM_SUPPORT, ROCM_SDIST]}
+    rocm_wheels = [w for w in cuda["wheels"] if w["name"].replace("-", "_").lower() not in swapped]
+    rocm_wheels += [w for w in old_rocm["wheels"] if w["name"].replace("-", "_").lower() in swapped]
+    rocm = dict(old_rocm, size=sum(w["size"] for w in rocm_wheels), wheels=rocm_wheels)
+    model_item = separator_model()
+    out = []
+    for item in items:
+        if item["id"] == "model:UVR-MDX-NET":
+            continue
+        out.append({"env:sheetsage": cuda, "env:sheetsage-rocm": rocm}.get(item["id"], item))
+        if item["id"] == "model:MERT-v2-FullSong":
+            out.append(model_item)
+    catalog["items"] = out
+    return catalog
+
+
 def main() -> None:
+    if "--sheetsage" in sys.argv:
+        # Only the Cover maker's environment and the separator: like --rocm, a
+        # full run would re-pin every model for a change that touches three items.
+        catalog = json.loads(CATALOG.read_text(encoding="utf-8"))
+        catalog = refresh_sheetsage(catalog)
+        CATALOG.write_text(json.dumps(catalog, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
+        print(f"Wrote {CATALOG} - {len(catalog['items'])} items")
+        return
     if "--rocm" in sys.argv:
         # Only the AMD environments, merged into the catalogue that is already
         # there. A full run would re-pin every model to whatever HEAD is today,
@@ -303,6 +370,7 @@ def main() -> None:
     # Models first: they are the biggest downloads, so Setup starts on them.
     for repo, component in MODELS.items():
         items.append(model(repo, component))
+    items.insert(list(MODELS).index("MERT-v2-FullSong") + 1, separator_model())
     print("Archives")
     items += [
         archive("tool:uv", f"https://github.com/astral-sh/uv/releases/download/{UV_VERSION}/"

@@ -5,8 +5,11 @@ import shutil
 import subprocess
 import sys
 
+from pathlib import Path
+
 from PySide6.QtWidgets import (
-    QComboBox, QDialog, QHBoxLayout, QLabel, QMessageBox, QPushButton, QSpinBox, QVBoxLayout,
+    QComboBox, QDialog, QFileDialog, QHBoxLayout, QLabel, QLineEdit, QMessageBox, QPushButton, QSpinBox,
+    QVBoxLayout,
 )
 
 from app import gpu, i18n, paths
@@ -114,6 +117,21 @@ class SettingsDialog(QDialog):
         sync_note.setWordWrap(True)
         layout.addWidget(sync_note)
 
+        layout.addWidget(QLabel(t("OpenUtau")))
+        openutau_row = QHBoxLayout()
+        self.openutau = QLineEdit(cfg.get("openutau_exe", ""))
+        self.openutau.setPlaceholderText(t("Not set - choose OpenUtau.exe"))
+        openutau_row.addWidget(self.openutau, 1)
+        browse = QPushButton(t("Browse…"))
+        browse.clicked.connect(self._browse_openutau)
+        openutau_row.addWidget(browse)
+        layout.addLayout(openutau_row)
+        openutau_note = QLabel(t("The score editor can open a score in OpenUtau, to be sung by a DiffSinger "
+                                 "voicebank. OpenUtau is a separate program; download it from openutau.com."))
+        openutau_note.setObjectName("Hint")
+        openutau_note.setWordWrap(True)
+        layout.addWidget(openutau_note)
+
         layout.addSpacing(6)
         layout.addWidget(heading(t("Maintenance")))
         box, inner = panel(12, 8)
@@ -155,7 +173,14 @@ class SettingsDialog(QDialog):
         combo.setCurrentIndex(max(0, combo.findData(current)))
         return combo
 
+    def _browse_openutau(self) -> None:
+        start = self.openutau.text().strip() or str(Path.home())
+        path, _ = QFileDialog.getOpenFileName(self, t("Find OpenUtau"), start, "OpenUtau.exe (OpenUtau.exe);;*.exe")
+        if path:
+            self.openutau.setText(str(Path(path)))
+
     def _save(self) -> None:
+        self.cfg.set("openutau_exe", self.openutau.text().strip())
         self.cfg.set("performance", self.performance.currentData())
         self.cfg.set("backend", self.backend.currentData())
         self.cfg.set("decoder", self.decoder.currentData())

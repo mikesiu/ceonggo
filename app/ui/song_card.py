@@ -34,6 +34,7 @@ class SongCard(QFrame):
     open_score = Signal(object)
     use_score = Signal(object, str)     # song, "create" | "cover"
     reuse = Signal(object)
+    replace_vocal = Signal(object)
     changed = Signal(object)
     delete = Signal(object)
 
@@ -127,6 +128,10 @@ class SongCard(QFrame):
             menu.addAction(t("Export as MP3…"), lambda: self._export(".mp3"))
             menu.addAction(t("Export as WAV…"), lambda: self._export(".wav"))
             menu.addAction(t("Export as FLAC…"), lambda: self._export(".flac"))
+            menu.addSeparator()
+            menu.addAction(t("Replace vocal - import a tuned vocal (.wav)…"),
+                           lambda: self.replace_vocal.emit(self.song))
+            menu.addSeparator()
         menu.addAction(t("Rename…"), self._rename)
         menu.addAction(t("Show in folder"), lambda: open_folder(self.song.folder))
         menu.addSeparator()

@@ -47,6 +47,10 @@ class Score:
     sections: list[tuple[int, str]] = field(default_factory=lambda: [(0, "verse")])
     chords: list[tuple[Fraction, str]] = field(default_factory=list)
     voices: dict[str, list[Note]] = field(default_factory=lambda: {v: [] for v in VOICES})
+    #: The words sung to this score. Not part of the ABC (YuE2 reads them as a
+    #: separate text) and never written by ``to_abc``; the editor keeps them here
+    #: so that undo and redo cover lyric edits too.
+    lyrics: str = ""
 
     @classmethod
     def blank(cls, bars: int = 8, meter: tuple[int, int] = (4, 4), **fields) -> "Score":
@@ -283,6 +287,36 @@ class Score:
                 note.pitch += semitones
         self.chords = [(t, theory.transpose_chord(c, semitones, self.key_at(self.bar_of(t))))
                        for t, c in self.chords]
+
+    def excerpt(self, first_bar: int, last_bar: int) -> "Score":
+        """Bars ``first_bar``..``last_bar`` (inclusive) as a score of their own, starting at 0.
+
+        Notes crossing either edge are cut there; a chord already sounding at the
+        start is restated on its first beat. Used to have one line sung on its own.
+        """
+        first, last = max(0, first_bar), min(self.bars - 1, last_bar)
+        if first > last:
+            raise ValueError("An excerpt needs at least one bar")
+        start, end = self.bar_start(first), self.bar_start(last + 1)
+        clone = self.copy()
+        voices = {}
+        for voice in VOICES:
+            clone._split_at(voice, start)
+            clone._split_at(voice, end)
+            voices[voice] = [Note(n.onset - start, n.pitch, n.duration)
+                             for n in clone.voices[voice] if start <= n.onset < end]
+        chords = [(t - start, c) for t, c in self.chords if start <= t < end]
+        sounding = self.chord_at(start)
+        if sounding and sounding[0] < start:
+            chords.insert(0, (F(0), sounding[1]))
+        key, key_changes = self.key_at(first), []
+        for bar in range(first + 1, last + 1):
+            if self.key_at(bar) != (key_changes[-1][1] if key_changes else key):
+                key_changes.append((bar - first, self.key_at(bar)))
+        sections = [(0, self.section_at(first) or "verse")]
+        sections += [(b - first, n) for b, n in sorted(self.sections) if first < b <= last]
+        return Score(bpm=self.bpm, key=key, meters=list(self.meters[first:last + 1]), key_changes=key_changes,
+                     sections=sections, chords=chords, voices=voices)
 
     def without_chords(self) -> "Score":
         clone = self.copy()

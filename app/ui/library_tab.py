@@ -6,7 +6,9 @@ from PySide6.QtWidgets import (
 )
 
 from app.i18n import N, t
+from app.jobs import requests as rq
 from app.songs import Song
+from app.ui.progress_card import ProgressCard
 from app.ui.widgets import open_folder
 
 FILTERS = [("all", N("All")), ("favourite", N("Favourites")), ("song", N("Songs")), ("cover", N("Covers")),
@@ -38,6 +40,12 @@ class LibraryTab(QWidget):
         folder.clicked.connect(lambda: open_folder(self.window_.library.root))
         top.addWidget(folder)
         layout.addLayout(top)
+
+        # Replace vocal runs from a song card here; its progress shows above the list.
+        self.progress = ProgressCard(rq.REMIX_STAGES, rq.REMIX_WEIGHT)
+        self.progress.cancel_clicked.connect(self.window_.engine.cancel_all)
+        self.progress.setVisible(False)
+        layout.addWidget(self.progress)
 
         self.host = QWidget()
         self.list = QVBoxLayout(self.host)

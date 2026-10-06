@@ -254,6 +254,12 @@ class CoverTab(QWidget):
 
         if self.cfg.get("last_cover_style"):
             self.style_builder.set_style(music.Style.from_dict(self.cfg.get("last_cover_style")))
+        self.lyrics.set_lyrics(self.cfg.get("last_cover_lyrics") or "")
+
+    def remember(self) -> None:
+        """Keep the new lyrics for next time, as Create does - words edited in the
+        score editor included. Called on Make cover and when Ceonggo closes."""
+        self.cfg.set("last_cover_lyrics", self.lyrics.lyrics())
 
     # --- state -----------------------------------------------------------
     def set_busy(self, busy: bool) -> None:
@@ -340,7 +346,9 @@ class CoverTab(QWidget):
         # The same editor, title and buttons as on the Create tab.
         origin = self.score_origin or t("Edited score")
         self.window_.edit_score(self.score_text, title=t("Score - {title}", title=origin), origin=origin,
-                                actions=("create", "cover"), primary="cover")
+                                actions=("create", "cover"), primary="cover",
+                                lyrics=self.lyrics.lyrics(), style=self.style_builder.style_text(),
+                                on_lyrics=self.lyrics.replace_all, audition=self.window_.audition)
 
     def _load_score(self) -> None:
         path, _ = QFileDialog.getOpenFileName(self, t("Open a score"), str(Path.home()), t("ABC score") + " (*.abc)")
@@ -388,6 +396,7 @@ class CoverTab(QWidget):
             return
         style, lyrics = self.style_builder.style_text(), self.lyrics.lyrics()
         self.cfg.set("last_cover_style", self.style_builder.style().to_dict())
+        self.remember()
         self.cfg.save()
         title = self.title.text().strip() or title_from_lyrics(lyrics)
         # cot="melody" follows the melody and lets the new style re-harmonise, which

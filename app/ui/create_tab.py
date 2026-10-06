@@ -355,8 +355,10 @@ class CreateTab(QWidget):
             QMessageBox.warning(self, t("Create song"), t("The score could not be read."))
             return
         self.window_.edit_score(abc, title=t("Your score - {title}", title=song.title), origin=song.title,
-                                actions=("sing", "cover"), primary="sing",
-                                on_sing=lambda text: self.sing_score(song, text))
+                                actions=("sing", "cover"), primary="sing", lyrics=song.lyrics, style=song.style,
+                                on_sing=lambda text, words: self.sing_score(song, text, lyrics=words),
+                                on_lyrics=self.lyrics.replace_all, seed=song.seed,
+                                audition=self.window_.audition)
 
     def set_score(self, text: str, origin: str) -> None:
         """Make the next Create follow this score (melody and chords)."""
@@ -376,7 +378,10 @@ class CreateTab(QWidget):
 
     def _edit_pending_score(self) -> None:
         self.window_.edit_score(self.score_text, title=t("Score"), origin=self.score_origin or t("Edited score"),
-                                actions=("create", "cover"), primary="create")
+                                actions=("create", "cover"), primary="create",
+                                lyrics=self.lyrics.lyrics(), style=self.style_builder.style_text(),
+                                on_lyrics=self.lyrics.replace_all, seed=self.seed.value(),
+                                audition=self.window_.audition)
 
     def _add_result(self, song: Song) -> None:
         self.empty.setVisible(False)

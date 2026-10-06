@@ -31,7 +31,7 @@ def test_song_job_uses_profile(tmp_path, monkeypatch):
 def test_worker_versions_match_the_window():
     from app.jobs.worker_proc import EXPECTED_WORKER_VERSION, worker_version
 
-    for name in ("yue2", "sheetsage"):
+    for name in ("yue2", "sheetsage", "extract", "download"):
         assert worker_version(ROOT / "workers" / f"{name}_worker.py") == EXPECTED_WORKER_VERSION
 
 
@@ -171,6 +171,33 @@ def test_catalogue_covers_every_string():
         assert set(re.findall(r"{\w+}", english)) == set(re.findall(r"{\w+}", chinese)), english
 
 
+def test_extract_job_names_both_stems(tmp_path, monkeypatch):
+    monkeypatch.setenv("CEONGGO_ROOT", str(tmp_path))
+    job = rq.extract_job(audio=tmp_path / "song.mp3", vocals=tmp_path / "out" / "song (Vocals).flac",
+                         instrumental=tmp_path / "out" / "song (Instrumental).flac")
+    assert job["vocals"].endswith("song (Vocals).flac") and job["instrumental"].endswith("song (Instrumental).flac")
+    assert job["model"].endswith("UVR-MDX-NET-Inst_HQ_3.onnx") and job["ffmpeg"].endswith("ffmpeg.exe")
+    assert {sid for sid, _ in rq.EXTRACT_STAGES} == set(rq.EXTRACT_WEIGHT)
+
+
+def test_cancelling_one_job_leaves_the_others():
+    """Stop in the Extract vocals dialog must not take a song queued in a tab with it,
+    even one whose fields are all equal (dataclasses compare by value)."""
+    from app.jobs.engine import Engine, Job
+
+    engine = Engine()
+    failed = []
+    running = Job("yue2", {"seed": 1}, on_fail=failed.append)
+    first, second = Job("extract", {}, on_fail=failed.append), Job("extract", {}, on_fail=failed.append)
+    assert first == second
+    engine.current, engine.queue = running, [first, second]
+
+    engine.cancel(second)
+    assert len(engine.queue) == 1 and engine.queue[0] is first
+    assert [event["kind"] for event in failed] == ["cancelled"]
+    assert engine.current is running                       # the running song is left alone
+
+
 def test_i18n_falls_back_to_english():
     i18n.load("zh-Hant")
     try:
@@ -197,3 +224,46 @@ def test_song_settings_come_from_the_run(tmp_path):
     assert settings.score == "chord-free" and settings.source_path == "D:/music/orig.mp3"
     (folder / Song.INPUT_SCORE).write_text("full score with chords", encoding="utf-8")
     assert Song.load(folder).settings().score == "full score with chords"      # preferred over job.json
+
+
+def test_words_edited_in_the_score_editor_reach_the_tab_that_opened_it(monkeypatch):
+    from types import SimpleNamespace
+
+    from app.ui import main_window, score_editor
+
+    class Box:                                    # a tab's lyrics box
+        def __init__(self, text):
+            self.text = text
+
+        def replace_all(self, text):
+            self.text = text
+
+    def leave_editor(action, edited):
+        """Open the editor from a tab, leave it through ``action``; return what each party got."""
+        class Editor:                             # stands in for the dialog: no Qt needed
+            def __init__(self, text, **_):
+                self.chosen = SimpleNamespace(connect=lambda slot: setattr(self, "slot", slot))
+
+            def edited_lyrics(self):
+                return edited
+
+            def exec(self):
+                self.slot(action, "ABC")
+
+        monkeypatch.setattr(score_editor, "ScoreEditor", Editor)
+        target = SimpleNamespace(lyrics=Box("target words"), set_score=lambda text, origin: None)
+        window = SimpleNamespace(cfg=SimpleNamespace(get=lambda key, default=None: default),
+                                 player=SimpleNamespace(player=SimpleNamespace(pause=None), latency_ms=0),
+                                 create_tab=target, cover_tab=target, show_tab=lambda tab: None)
+        window.use_score = lambda *args, **kwargs: main_window.MainWindow.use_score(window, *args, **kwargs)
+        opener, sung = Box("old words"), []
+        main_window.MainWindow.edit_score(window, "ABC", title="t", origin="o", lyrics="old words",
+                                          style="Cantonese", on_sing=lambda abc, words: sung.append(words),
+                                          on_lyrics=opener.replace_all)
+        return opener.text, target.lyrics.text, sung
+
+    assert leave_editor("sing", "new words") == ("new words", "target words", ["new words"])
+    assert leave_editor("create", "new words") == ("new words", "new words", [])
+    assert leave_editor("cover", "new words") == ("new words", "new words", [])
+    assert leave_editor("sing", None) == ("old words", "target words", [None])     # untouched words
+    assert leave_editor("create", None) == ("old words", "target words", [])

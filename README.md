@@ -76,8 +76,33 @@ Opens from a song card's **Score** button, from **See / edit the score** on the 
   shown with the change marked on the ruler, and so are bars in another metre.
 - **Play** — a plain synth preview of melody, instrument line and chords, so you can check the
   notes before spending minutes on a song.
+- **Words (Cantonese)** — for a Cantonese song with lyrics, a lane under the chords shows the word
+  expected on each vocal note with its Jyutping. Cantonese is sung on its tones: where the melody
+  moves against a word's tone (倒字) the word is heard as another one, and the cell turns red
+  (amber for a looser fit), following the 0243 rule lyricists use. Click a word to select its notes
+  (↑/↓ then fixes it), choose which reading it has, swap in a common word that sounds the same, or
+  edit its line. The status line counts tone clashes, words without a note of their own, and notes
+  without a new word. Edited words travel with the score to Create, Cover or **Sing it now**, and
+  the lyrics box of the tab the editor was opened from shows them too (Ctrl+Z there brings the old
+  words back); closing the editor changes nothing. To check a change by ear, a word's menu offers
+  **Hear … in the song** (the phrase around the word, from the finished song: YuE2 sings a few
+  seconds off the score's clock, so the first time the song is transcribed once, about half a
+  minute, and the timing kept beside it as `clock.json`) and
+  **Sing this line now**: YuE2 sings just that line's bars with the current words and notes, as a
+  short clip kept in the cache, never the library. It takes a few minutes, and given so little
+  score YuE2 tends to sing the line more than once. YuE2 places the words itself, so the lane is an estimate: it pairs syllables with notes in order, kept
+  in step at the spaces and line ends of the lyrics and the rests of the melody.
 - **Use it** — **Make a song with this score** (Create) or **Make a cover with this score**
   (Cover), plus **Open .abc…** / **Save as .abc…** and an **ABC text** view for hand editing.
+  **Save lyrics…** keeps the words as a text file, edits included: an .abc has no place for them.
+- **OpenUtau ▾** — **Export .ustx…** or **Open in OpenUtau** (set OpenUtau.exe in Settings) writes
+  the vocal line as an OpenUtau project for a DiffSinger voicebank to sing. The words are the Words
+  lane's: one syllable per note, `+` where a note holds the syllable before. A Cantonese song gets
+  toneless Jyutping (`gam`, not `gam1`), with any reading you picked. OpenUtau's DiffSinger Jyutping
+  phonemizer looks syllables up without tones, and the melody carries the tone. Opened from a
+  library song, the project runs on that song's own clock (its tempo scaled to where YuE2 really
+  sang), so a vocal rendered from it lines up with the song's band under **Replace vocal**. Choose
+  the singer in OpenUtau.
 
 Every score the editor sends is written in YuE2's own ABC dialect, read back and compared with what
 you edited; if anything differs it refuses rather than sending something else. The parser is
@@ -91,9 +116,50 @@ score it was sung from, and for covers the original recording. Press Create or M
 version, or tick **Keep this seed** to reproduce the same one. It works on older songs too, because
 the settings are read from the `job.json` saved with every run.
 
+### Replace vocal
+
+⋯ → **Replace vocal - import a tuned vocal (.wav)…** on a song card keeps that song's band and puts
+your vocal over it, as a new song beside the original (which is never changed). The vocal is taken
+out with UVR's MDX-Net *Inst HQ 3* separator, run directly with ONNX Runtime on DirectML (NVIDIA or
+AMD, about 7 s for a three-minute song on a Radeon AI PRO R9700). The new vocal is shifted by the song's
+clock and mixed with FFmpeg to −14 LUFS: one pass measures the loudness, a second applies one
+linear gain. The instrumental is kept beside the result as `instrumental.flac`. It needs the Cover
+maker; older installs get the separator from Settings → Repair.
+
+The usual round trip: open the song's **Score**, **OpenUtau ▾ → Open in OpenUtau**, pick a
+Cantonese DiffSinger singer, tune, export the vocal as WAV, then **Replace vocal** on the same song.
+
+### Extract vocals
+
+**Tools ▾ → Extract Vocals from Audio…** splits any MP3, WAV or FLAC, not only a Ceonggo song, into
+`<name> (Vocals).flac` and `<name> (Instrumental).flac` (24-bit, 44.1 kHz) in a folder you choose.
+It is the same separator as Replace vocal: the model gives the instrumental, and the vocal is what
+is left of the mix, so the two add back up to the original. Progress shows in its own window, which
+can stay open while you keep working; Stop or closing it ends only this job. Existing files are
+replaced only after you agree. It needs the Cover maker, like Replace vocal.
+
+### Download audio
+
+**Tools ▾ → Download Audio from URL…** saves the audio of one link (YouTube, and the many other
+sites [yt-dlp](https://github.com/yt-dlp/yt-dlp) knows) as FLAC or MP3 in a folder you choose,
+ready for Extract vocals or the Cover tab. The best audio stream is converted with Ceonggo's own
+FFmpeg, so a YouTube download is usually a 48 kHz FLAC of its Opus track. Progress shows speed and
+time left; Stop or closing the window ends only this job and leaves no partial files. A file already
+in the folder is never replaced: the new one is saved as `<title> (2).flac`. Playlists and live
+streams are refused, with a message saying why.
+
+yt-dlp runs in the Cover maker's runtime, with Deno (installed as a Python wheel, no system install)
+to solve YouTube's JavaScript challenges. Which YouTube client to ask is left to yt-dlp: forcing
+`android`/`web` found no audio-only stream at all in October 2026. If YouTube refuses a fresh media
+link (HTTP 403), the download asks for new links once by itself. When downloads that used to work
+start failing, **Update downloader** installs the newest yt-dlp from PyPI into the runtime with
+Ceonggo's uv. A later Repair puts the pinned version back. Installs from before this tool get
+yt-dlp from Settings → Repair. Only download what you have the right to use.
+
 ### Settings
 
-Language, graphics-card mode, audio decoder, and maintenance (repair, log folder, clear cache).
+Language, graphics-card mode, audio decoder, where OpenUtau is, and maintenance (repair, log
+folder, clear cache).
 
 **Graphics-card modes** decide what is traded for memory, never quality:
 
@@ -110,17 +176,19 @@ If a song still runs out of memory, Ceonggo retries it once in Lowest memory mod
 ```
 Ceonggo.exe / Ceonggo Setup.exe   PySide6 windows (no torch inside)
 runtime/yue2/                 standalone Python 3.12 + torch 2.10 cu128 + yue2-infer 0.1.6
-runtime/sheetsage/            standalone Python 3.11 + torch 2.8 cu128 (SheetSage2's pinned versions)
+runtime/sheetsage/            standalone Python 3.11 + torch 2.8 cu128 (SheetSage2's pinned versions),
+                              onnxruntime-directml, yt-dlp + Deno
 runtime/ffmpeg/, runtime/uv/  FFmpeg 6.1 shared, uv
 models/                       YuE2-3B, YuE2-Vae, SheetSage2, MERT-v2-FullSong (pinned commits)
 songs/                        one plain folder per song (audio.flac, score.abc, song.json …)
-app/score/                    read, edit, write and preview scores (stdlib only)
+app/score/                    read, edit, write and preview scores; pair lyrics with notes (stdlib only)
+app/cantonese.py              Jyutping (ToJyutping) and the tone check for the editor's Words lane
 workers/                      the scripts the downloaded Pythons run
 ```
 
 - **Portable:** the runtimes carry no venvs, since a venv stores absolute paths. Packages install
   straight into the standalone Pythons. Every cache and temp folder (`HF_HOME`, `TORCH_HOME`,
-  `TEMP` …) points inside the folder, and nothing goes to `%APPDATA%` or the registry. Proven by
+  `DENO_DIR`, `TEMP` …) points inside the folder, and nothing goes to `%APPDATA%` or the registry. Proven by
   moving the runtime to another path and generating from there. (Developing in a venv is a separate
   matter and perfectly fine — see *Developing*.)
 - **Workers:** the window never imports torch. Each job is
@@ -192,7 +260,7 @@ MIOpen's kernel cache also costs about 3x on the first decode until it warms.
 python -m venv .venv                      # once; .venv is git-ignored
 .venv\Scripts\activate                    # PowerShell: .venv\Scripts\Activate.ps1
 pip install -r requirements-build.txt
-python -m pytest tests -q                 # 89 tests, no GPU needed
+python -m pytest tests -q                 # 135 tests, no GPU needed
 python Ceonggo.py                         # or Ceonggo.bat / CeonggoSetup.bat, which find .venv themselves
 set CEONGGO_ROOT=D:\somewhere             # point either program at another portable folder
 ```
@@ -222,6 +290,9 @@ back restores it exactly, and every pitch in every key spells back to itself.
 ## Licences
 
 YuE2's code is Apache-2.0, and `app/score/abc_dialect.py` is adapted from its `abc_tools.py`
-(notice and licence in `licences/`, shipped with the release). The YuE2, SheetSage2 and MERT model
+(notice and licence in `licences/`, shipped with the release). The score editor's Jyutping comes
+from [ToJyutping](https://github.com/CanCLID/ToJyutping) (BSD-2, notice in `licences/`). The YuE2, SheetSage2 and MERT model
 weights are **CC BY-NC 4.0** (non-commercial), which Setup makes users acknowledge before
-downloading.
+downloading. Replace vocal's separator, `UVR-MDX-NET-Inst_HQ_3.onnx`, comes from the
+[Ultimate Vocal Remover](https://github.com/Anjok07/ultimatevocalremovergui) project's public model
+release. OpenUtau is not part of Ceonggo; it only reads the files Ceonggo writes.

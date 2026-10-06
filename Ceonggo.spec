@@ -13,6 +13,8 @@ Pythons execute.
 """
 import sys
 
+from PyInstaller.utils.hooks import collect_data_files
+
 sys.path.insert(0, SPECPATH)
 from build_common import EXCLUDES, strip_unused
 
@@ -25,12 +27,12 @@ DATAS = [
 ]
 
 
-def analysis(script, extra_excludes=()):
+def analysis(script, extra_excludes=(), extra_datas=()):
     a = Analysis(
         [script],
         pathex=[SPECPATH],
         binaries=[],
-        datas=DATAS,
+        datas=DATAS + list(extra_datas),
         hiddenimports=[],
         hookspath=[],
         hooksconfig={},
@@ -60,7 +62,8 @@ def program(a, name, icon):
     )
 
 
-app = analysis("Ceonggo.py")
+# ToJyutping reads its pronunciation data (trie.txt) from beside its own code.
+app = analysis("Ceonggo.py", extra_datas=collect_data_files("ToJyutping"))
 setup = analysis("CeonggoSetup.py", extra_excludes=["PySide6.QtMultimedia"])
 
 app_exe = program(app, "Ceonggo", "assets/icons/Ceonggo.ico")
